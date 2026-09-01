@@ -392,6 +392,7 @@ def _validate_tier_quality(evaluation: dict[str, Any], count: int) -> None:
             ):
                 raise PolicyError(f"{channel} thresholds must not weaken for larger tiers")
 
+
 def _validate_promotion(policy: dict[str, Any]) -> None:
     _exact(policy, {
         "schema_version", "policy_id", "scope", "candidate_admission", "evaluation",
