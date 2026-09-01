@@ -28,6 +28,7 @@ _MODEL_REDIRECT_HOSTS = {
     "cdn-lfs-us-1.hf.co",
     "cdn-lfs-eu-1.hf.co",
     "cas-bridge.xethub.hf.co",
+    "us.aws.cdn.hf.co",
 }
 _RUNTIME_REDIRECT_HOSTS = {
     "github.com",

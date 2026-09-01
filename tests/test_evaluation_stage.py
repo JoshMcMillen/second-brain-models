@@ -101,3 +101,8 @@ def test_redirect_handler_rejects_non_https_default_port() -> None:
         handler.redirect_request(
             request, None, 302, "Found", {}, "https://huggingface.co:444/redirected",
         )
+
+
+def test_current_huggingface_xet_cdn_is_exactly_allowlisted() -> None:
+    assert "us.aws.cdn.hf.co" in evaluation_stage._MODEL_REDIRECT_HOSTS
+    assert all("*" not in host for host in evaluation_stage._MODEL_REDIRECT_HOSTS)
