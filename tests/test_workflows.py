@@ -53,7 +53,12 @@ def test_privileged_and_candidate_workflows_fail_safe() -> None:
     assert "sudo unshare" in evaluation
     assert "--mount --net --pid --fork --mount-proc --kill-child=SIGKILL" in evaluation
     assert "--expected-runtime-executable" in evaluation
-    assert 'sudo chmod o=x "$RUNNER_TEMP"' in evaluation
+    assert "EVALUATION_ROOT: /opt/second-brain-evaluation-" in evaluation
+    assert "--runtime-scratch-root" in evaluation
+    assert "--runtime-root" in evaluation
+    assert "extracted-runtime-tree.sha256" in evaluation
+    assert "isolated-runtime-tree-pre.sha256" in evaluation
+    assert 'sudo chmod o=x "$RUNNER_TEMP"' not in evaluation
     assert 'sudo chmod o+x "$RUNNER_TEMP"' not in evaluation
     assert "sudo -u nobody /usr/bin/test -x" in evaluation
     assert "ref: ${{ github.sha }}" in evaluation

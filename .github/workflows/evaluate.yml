@@ -94,6 +94,7 @@ jobs:
       INPUT_MANIFEST_PATH: ${{ inputs.manifest_path }}
       EVALUATOR_PLATFORM: linux-x86_64
       EVALUATOR_PORT: "8080"
+      EVALUATION_ROOT: /opt/second-brain-evaluation-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
       - name: Check out protected default-branch evaluator
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -148,6 +149,10 @@ jobs:
             printf 'runtime_manifest=%s\n' "$GITHUB_WORKSPACE/$runtime_manifest"
             printf 'runtime_archive=%s\n' "$RUNNER_TEMP/staging/$runtime_relative"
             printf 'runtime_executable=%s\n' "$RUNNER_TEMP/runtime/$executable_relative"
+            printf 'isolated_model_path=%s\n' "$EVALUATION_ROOT/model.gguf"
+            printf 'isolated_runtime_root=%s\n' "$EVALUATION_ROOT/runtime"
+            printf 'isolated_runtime_executable=%s\n' "$EVALUATION_ROOT/runtime/$executable_relative"
+            printf 'runtime_scratch_root=%s\n' "$EVALUATION_ROOT/runtime-scratch"
             printf 'runtime_version=%s\n' "$(jq -er '.runtime.version' "$receipt")"
             printf 'runtime_package_sha256=%s\n' "$(jq -er '.runtime.sha256' "$receipt")"
           } >> "$GITHUB_OUTPUT"
@@ -173,22 +178,60 @@ jobs:
             --platform "$EVALUATOR_PLATFORM" \
             --destination "$RUNNER_TEMP/runtime" \
             > "$RUNNER_TEMP/receipts/runtime-extract.json"
-          # The runner temp root is private by default. Grant traverse-only
-          # access so the dropped runtime identity can reach only known paths.
-          sudo chmod o=x "$RUNNER_TEMP"
-          sudo chown -R root:root "$RUNNER_TEMP/runtime"
-          sudo chmod -R go-w "$RUNNER_TEMP/runtime"
+
+          # Materialize only the already-validated inputs in a fresh path whose
+          # ancestors are traversable by the dropped runtime identity. Evidence
+          # remains under the runner's private temporary directory.
+          if [[ ! "$GITHUB_RUN_ID" =~ ^[0-9]+$ || ! "$GITHUB_RUN_ATTEMPT" =~ ^[0-9]+$ ]]; then
+            echo "GitHub run identity is not numeric." >&2
+            exit 2
+          fi
+          sudo test ! -e "$EVALUATION_ROOT"
+          sudo test ! -L "$EVALUATION_ROOT"
+          sudo mkdir --mode=0755 "$EVALUATION_ROOT"
+          sudo install -d -o root -g root -m 0755 "$EVALUATION_ROOT/runtime"
+          sudo install -o root -g root -m 0444 \
+            "${{ steps.exact.outputs.model_path }}" \
+            "${{ steps.exact.outputs.isolated_model_path }}"
+          sudo cp -a "$RUNNER_TEMP/runtime/." "$EVALUATION_ROOT/runtime/"
+          sudo chown -R root:root "$EVALUATION_ROOT/runtime"
+          sudo find "$EVALUATION_ROOT/runtime" -type d -exec chmod 0555 {} +
+          sudo find "$EVALUATION_ROOT/runtime" -type f -exec chmod 0444 {} +
+          sudo chmod 0555 "${{ steps.exact.outputs.isolated_runtime_executable }}"
+          if find "$EVALUATION_ROOT/runtime" ! -type d ! -type f -print -quit | grep -q .; then
+            echo "Isolated runtime tree contains a non-regular member." >&2
+            exit 2
+          fi
           sudo chown root:root \
             "${{ steps.exact.outputs.model_path }}" \
-            "${{ steps.exact.outputs.runtime_archive }}" \
-            "${{ steps.exact.outputs.runtime_executable }}"
+            "${{ steps.exact.outputs.runtime_archive }}"
           sudo chmod 0444 \
             "${{ steps.exact.outputs.model_path }}" \
             "${{ steps.exact.outputs.runtime_archive }}"
-          sudo chmod 0555 "${{ steps.exact.outputs.runtime_executable }}"
-          sudo -u nobody /usr/bin/test -x "${{ steps.exact.outputs.runtime_executable }}"
-          sudo -u nobody /usr/bin/test -r "${{ steps.exact.outputs.model_path }}"
-          sha256sum "${{ steps.exact.outputs.runtime_executable }}" \
+          cmp "${{ steps.exact.outputs.model_path }}" \
+            "${{ steps.exact.outputs.isolated_model_path }}"
+          cmp "${{ steps.exact.outputs.runtime_executable }}" \
+            "${{ steps.exact.outputs.isolated_runtime_executable }}"
+          sudo -u nobody /usr/bin/test -x \
+            "${{ steps.exact.outputs.isolated_runtime_executable }}"
+          sudo -u nobody /usr/bin/test -r \
+            "${{ steps.exact.outputs.isolated_model_path }}"
+          runtime_tree_receipt() {
+            local tree_root="$1"
+            (
+              cd "$tree_root"
+              find . -type f -print0 | LC_ALL=C sort -z | xargs -0 -r sha256sum
+            )
+          }
+          runtime_tree_receipt "$RUNNER_TEMP/runtime" \
+            > "$RUNNER_TEMP/receipts/extracted-runtime-tree.sha256"
+          runtime_tree_receipt "$EVALUATION_ROOT/runtime" \
+            > "$RUNNER_TEMP/receipts/isolated-runtime-tree-pre.sha256"
+          cmp "$RUNNER_TEMP/receipts/extracted-runtime-tree.sha256" \
+            "$RUNNER_TEMP/receipts/isolated-runtime-tree-pre.sha256"
+          sha256sum "${{ steps.exact.outputs.isolated_model_path }}" \
+            > "$RUNNER_TEMP/receipts/isolated-model-pre.sha256"
+          sha256sum "${{ steps.exact.outputs.isolated_runtime_executable }}" \
             > "$RUNNER_TEMP/receipts/runtime-executable-pre.sha256"
       - name: Run runtime and synthetic suite in one disconnected namespace
         run: |
@@ -200,12 +243,14 @@ jobs:
             "$python_binary" -m second_brain_models isolated-supervisor \
             --repo-root "$GITHUB_WORKSPACE" \
             --python-executable "$python_binary" \
-            --runtime-executable "${{ steps.exact.outputs.runtime_executable }}" \
-            --model "${{ steps.exact.outputs.model_path }}" \
+            --runtime-root "${{ steps.exact.outputs.isolated_runtime_root }}" \
+            --runtime-executable "${{ steps.exact.outputs.isolated_runtime_executable }}" \
+            --model "${{ steps.exact.outputs.isolated_model_path }}" \
             --port "$EVALUATOR_PORT" \
             --isolation-id "$isolation_id" \
             --supervisor-root "$RUNNER_TEMP/evidence/supervisor" \
             --runtime-output-root "$RUNNER_TEMP/evidence/runtime" \
+            --runtime-scratch-root "${{ steps.exact.outputs.runtime_scratch_root }}" \
             --artifact-reader-gid "$(id -g)"
       - name: Validate process-tree trace and no-egress evidence
         run: |
@@ -220,7 +265,7 @@ jobs:
           fi
           sb-models network-monitor-check \
             --network-trace "${trace_files[@]}" \
-            --expected-runtime-executable "${{ steps.exact.outputs.runtime_executable }}" \
+            --expected-runtime-executable "${{ steps.exact.outputs.isolated_runtime_executable }}" \
             --output "$RUNNER_TEMP/receipts/network-monitor.json"
           sb-models merge-isolation-evidence \
             --probe "$RUNNER_TEMP/evidence/runtime/probe.json" \
@@ -240,10 +285,18 @@ jobs:
             --package-root "$RUNNER_TEMP/staging" \
             --platform "$EVALUATOR_PLATFORM" \
             --report "$RUNNER_TEMP/receipts/runtime-post.json"
-          sha256sum "${{ steps.exact.outputs.runtime_executable }}" \
+          sha256sum "${{ steps.exact.outputs.isolated_model_path }}" \
+            > "$RUNNER_TEMP/receipts/isolated-model-post.sha256"
+          (
+            cd "$EVALUATION_ROOT/runtime"
+            find . -type f -print0 | LC_ALL=C sort -z | xargs -0 -r sha256sum
+          ) > "$RUNNER_TEMP/receipts/isolated-runtime-tree-post.sha256"
+          sha256sum "${{ steps.exact.outputs.isolated_runtime_executable }}" \
             > "$RUNNER_TEMP/receipts/runtime-executable-post.sha256"
           cmp "$RUNNER_TEMP/receipts/candidate-pre.json" "$RUNNER_TEMP/receipts/candidate-post.json"
           cmp "$RUNNER_TEMP/receipts/runtime-pre.json" "$RUNNER_TEMP/receipts/runtime-post.json"
+          cmp "$RUNNER_TEMP/receipts/isolated-model-pre.sha256" "$RUNNER_TEMP/receipts/isolated-model-post.sha256"
+          cmp "$RUNNER_TEMP/receipts/isolated-runtime-tree-pre.sha256" "$RUNNER_TEMP/receipts/isolated-runtime-tree-post.sha256"
           cmp "$RUNNER_TEMP/receipts/runtime-executable-pre.sha256" "$RUNNER_TEMP/receipts/runtime-executable-post.sha256"
       - name: Score deterministic quality gate
         run: |

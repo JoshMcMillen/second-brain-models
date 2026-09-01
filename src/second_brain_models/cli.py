@@ -153,12 +153,14 @@ def _parser() -> argparse.ArgumentParser:
     )
     isolated.add_argument("--repo-root", type=_path, default=Path.cwd())
     isolated.add_argument("--python-executable", required=True, type=_path)
+    isolated.add_argument("--runtime-root", required=True, type=_path)
     isolated.add_argument("--runtime-executable", required=True, type=_path)
     isolated.add_argument("--model", required=True, type=_path)
     isolated.add_argument("--port", required=True, type=int)
     isolated.add_argument("--isolation-id", required=True)
     isolated.add_argument("--supervisor-root", required=True, type=_path)
     isolated.add_argument("--runtime-output-root", required=True, type=_path)
+    isolated.add_argument("--runtime-scratch-root", required=True, type=_path)
     isolated.add_argument("--artifact-reader-gid", required=True, type=int)
 
     discovery = commands.add_parser("discover", help="query allowlisted publisher metadata without downloading or executing content")
@@ -271,10 +273,12 @@ def run(argv: list[str] | None = None) -> int:
 
         receipt = run_isolated_evaluation(
             repo_root=args.repo_root, python_executable=args.python_executable,
-            runtime_executable=args.runtime_executable, model_path=args.model,
+            runtime_root=args.runtime_root, runtime_executable=args.runtime_executable,
+            model_path=args.model,
             port=args.port, isolation_id=args.isolation_id,
             supervisor_root=args.supervisor_root,
             runtime_output_root=args.runtime_output_root,
+            runtime_scratch_root=args.runtime_scratch_root,
             artifact_reader_gid=args.artifact_reader_gid,
         )
         _print({"status": receipt["status"], "isolation_id": receipt["isolation_id"]})
