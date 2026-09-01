@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import shutil
 import signal
+import socket
 import subprocess
 import time
 from typing import Any
@@ -173,7 +174,10 @@ def run_isolated_evaluation(
     """
     if os.name != "posix" or os.geteuid() != 0 or os.getpid() != 1:
         raise EvaluationError("isolated evaluator must run as root PID 1 in a new Linux PID namespace")
-    interfaces = {path.name for path in Path("/sys/class/net").iterdir()}
+    try:
+        interfaces = {name for _, name in socket.if_nameindex()}
+    except OSError as exc:
+        raise EvaluationError("isolated evaluator could not enumerate namespace interfaces") from exc
     if interfaces != {"lo"}:
         raise EvaluationError("isolated evaluator requires a fresh network namespace containing only loopback")
     if not 1 <= port <= 65535:
