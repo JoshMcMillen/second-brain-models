@@ -49,6 +49,17 @@ def test_privileged_and_candidate_workflows_fail_safe() -> None:
 
     evaluation = (WORKFLOW_ROOT / "evaluate.yml").read_text(encoding="utf-8")
     assert "evaluate-exact-candidate" in evaluation
+    assert re.search(r"(?m)^  push:\s*$", evaluation)
+    assert re.search(r'(?m)^      - "models/\*/manifest\.json"\s*$', evaluation)
+    assert "github.event_name == 'push'" in evaluation
+    assert "Resolve reviewed candidate manifest" in evaluation
+    assert "Exactly one added or modified model manifest is required" in evaluation
+    assert "git diff --diff-filter=AMR --name-only" in evaluation
+    assert "fetch-depth: 0" in evaluation
+    assert "model-evaluation-auto" in evaluation
+    assert "github.event.repository.default_branch" in evaluation
+    assert "DISPATCH_MANIFEST_PATH: ${{ inputs.manifest_path }}" in evaluation
+    assert "INPUT_MANIFEST_PATH: ${{ inputs.manifest_path }}" not in evaluation
     assert "disconnected-evaluation-not-yet-enabled" not in evaluation
     assert "sudo unshare" in evaluation
     assert "--mount --net --pid --fork --mount-proc --kill-child=SIGKILL" in evaluation

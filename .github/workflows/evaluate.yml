@@ -1,6 +1,11 @@
 name: Evaluate reviewed local model
 
 on:
+  push:
+    branches:
+      - main
+    paths:
+      - "models/*/manifest.json"
   pull_request:
     paths:
       - "evals/**"
@@ -86,12 +91,12 @@ jobs:
       - run: python -m pytest
 
   evaluate-exact-candidate:
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.ref_name == github.event.repository.default_branch)
     runs-on: ubuntu-24.04
     timeout-minutes: 60
-    environment: model-evaluation
+    environment:
+      name: ${{ github.event_name == 'push' && 'model-evaluation-auto' || 'model-evaluation' }}
     env:
-      INPUT_MANIFEST_PATH: ${{ inputs.manifest_path }}
       EVALUATOR_PLATFORM: linux-x86_64
       EVALUATOR_PORT: "8080"
       EVALUATION_ROOT: /opt/second-brain-evaluation-${{ github.run_id }}-${{ github.run_attempt }}
@@ -100,7 +105,43 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           ref: ${{ github.sha }}
+          fetch-depth: 0
           persist-credentials: false
+      - name: Resolve reviewed candidate manifest
+        id: candidate
+        env:
+          DISPATCH_MANIFEST_PATH: ${{ inputs.manifest_path }}
+          BEFORE_SHA: ${{ github.event.before }}
+          AFTER_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
+            manifest_path="$DISPATCH_MANIFEST_PATH"
+          else
+            if [[ ! "$BEFORE_SHA" =~ ^[0-9a-f]{40}$ || ! "$AFTER_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+              echo "Push event did not provide canonical commit identifiers." >&2
+              exit 2
+            fi
+            mapfile -t changed_manifests < <(
+              git diff --diff-filter=AMR --name-only \
+                "$BEFORE_SHA" "$AFTER_SHA" -- 'models/*/manifest.json'
+            )
+            if (( ${#changed_manifests[@]} != 1 )); then
+              echo "Exactly one added or modified model manifest is required; found ${#changed_manifests[@]}." >&2
+              printf 'Changed manifests: %s\n' "${changed_manifests[*]:-none}" >&2
+              exit 2
+            fi
+            manifest_path="${changed_manifests[0]}"
+          fi
+          if [[ ! "$manifest_path" =~ ^models/[a-z0-9][a-z0-9._-]*/manifest\.json$ ]]; then
+            echo "Manifest path is not canonical." >&2
+            exit 2
+          fi
+          if [[ ! -f "$manifest_path" || -L "$manifest_path" ]]; then
+            echo "Manifest must be a regular, non-symlink file." >&2
+            exit 2
+          fi
+          printf 'manifest_path=%s\n' "$manifest_path" >> "$GITHUB_OUTPUT"
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
         with:
           python-version: "3.13"
@@ -121,6 +162,8 @@ jobs:
             ip -Version
           } > "$RUNNER_TEMP/receipts/toolchain.txt"
       - name: Validate and download exact public inputs
+        env:
+          INPUT_MANIFEST_PATH: ${{ steps.candidate.outputs.manifest_path }}
         run: |
           set -euo pipefail
           if [[ ! "$INPUT_MANIFEST_PATH" =~ ^models/[a-z0-9][a-z0-9._-]*/manifest\.json$ ]]; then
@@ -136,6 +179,8 @@ jobs:
             --receipt "$RUNNER_TEMP/receipts/download.json"
       - name: Resolve validated content-addressed paths
         id: exact
+        env:
+          INPUT_MANIFEST_PATH: ${{ steps.candidate.outputs.manifest_path }}
         run: |
           set -euo pipefail
           receipt="$RUNNER_TEMP/receipts/download.json"

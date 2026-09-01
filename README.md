@@ -15,7 +15,7 @@ The v1 goal is deliberately small:
 7. Require an owner decision before publishing it as beta or stable.
 8. Distribute approved, content-addressed artifacts from Cloudflare R2 under a signed catalog.
 
-This repository is being bootstrapped around this documentation and contract surface. It does not yet publish an installable catalog. The first Qwen/llama.cpp records are metadata-only quarantined candidates; they have not been mirrored, executed, no-egress tested, evaluated, or approved.
+This repository is being bootstrapped around this documentation and contract surface. It does not yet publish an installable catalog. The first Qwen3 0.6B/llama.cpp candidate passed exact-artifact, isolated-runtime, and no-egress checks, but passed only 3 of 30 product-quality cases. It remains quarantined and is not approved for installation.
 
 ## Trust boundary
 
@@ -85,6 +85,7 @@ catalog/                        signed beta, stable, and revoked catalogs
 - Do not commit model weights, private keys, credentials, raw user content, or model-generated user content.
 - Do not add an upstream source without owner approval and an immutable revision.
 - Do not execute code supplied by a model repository.
+- Add or modify only one model manifest per pull request so its protected-main merge maps to one automatic evaluation.
 - Treat runtime packages as untrusted archives until their exact digest, safe extraction, local-only configuration, and no-egress evidence pass review.
 - Treat every new artifact, tokenizer, chat template, license change, and quantization as a new candidate.
 - Keep workflow code on the protected default branch. Evaluators must not execute code from candidate pull requests.
