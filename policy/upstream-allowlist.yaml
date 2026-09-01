@@ -1,0 +1,60 @@
+schema_version: 1
+policy_id: upstream-allowlist-v1
+default_decision: deny
+
+purpose: >-
+  This list permits an upstream repository to enter candidate review. It does
+  not approve a model, artifact, license, capability, or release channel.
+
+repository_identity:
+  require_exact_host: true
+  require_exact_namespace: true
+  require_immutable_revision: true
+  revision_pattern: "^[0-9a-f]{40,64}$"
+  forbid_moving_refs: true
+  forbid_remote_code: true
+
+allowed_publishers:
+  - publisher_id: openai
+    host: huggingface.co
+    namespace: openai
+    repository_pattern: "^huggingface\\.co/openai/[A-Za-z0-9][A-Za-z0-9._-]*$"
+    decision: candidate_review_only
+  - publisher_id: qwen
+    host: huggingface.co
+    namespace: Qwen
+    repository_pattern: "^huggingface\\.co/Qwen/[A-Za-z0-9][A-Za-z0-9._-]*$"
+    decision: candidate_review_only
+  - publisher_id: microsoft
+    host: huggingface.co
+    namespace: microsoft
+    repository_pattern: "^huggingface\\.co/microsoft/[A-Za-z0-9][A-Za-z0-9._-]*$"
+    decision: candidate_review_only
+  - publisher_id: mistral-ai
+    host: huggingface.co
+    namespace: mistralai
+    repository_pattern: "^huggingface\\.co/mistralai/[A-Za-z0-9][A-Za-z0-9._-]*$"
+    decision: candidate_review_only
+  - publisher_id: google
+    host: huggingface.co
+    namespace: google
+    repository_pattern: "^huggingface\\.co/google/[A-Za-z0-9][A-Za-z0-9._-]*$"
+    decision: candidate_review_only
+
+candidate_gates:
+  exact_repository_match_required: true
+  immutable_revision_required: true
+  publisher_control_must_be_manually_confirmed: true
+  license_review_required_per_revision: true
+  artifact_hash_review_required: true
+  executable_files_forbidden: true
+  custom_model_code_forbidden: true
+  trust_remote_code_forbidden: true
+  symlinks_forbidden: true
+  archive_artifacts_forbidden: true
+  mirror_path_required_for_install: true
+
+non_authority:
+  allowlist_grants_installability: false
+  allowlist_grants_task_capability: false
+  suggested_tasks_are_advisory: true

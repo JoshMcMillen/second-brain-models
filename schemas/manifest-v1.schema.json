@@ -1,0 +1,545 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://second-brain.local/schemas/manifest-v1.schema.json",
+  "title": "Second Brain mirrored model manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "model_id",
+    "release",
+    "display_name",
+    "tier",
+    "quantization",
+    "upstream",
+    "artifact",
+    "license",
+    "runtime",
+    "evaluation",
+    "external_quality_evidence",
+    "suggested_tasks",
+    "suggested_tasks_advisory",
+    "hardware",
+    "promotion"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "model_id": {
+      "$ref": "#/$defs/modelId"
+    },
+    "release": {
+      "$ref": "#/$defs/releaseId"
+    },
+    "display_name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 160,
+      "pattern": "^[^\\r\\n]+$"
+    },
+    "tier": {
+      "type": "string",
+      "enum": [
+        "lite",
+        "standard",
+        "plus"
+      ]
+    },
+    "quantization": {
+      "description": "Exact quantization encoded by the published GGUF artifact.",
+      "type": "string",
+      "minLength": 2,
+      "maxLength": 32,
+      "pattern": "^[A-Z0-9][A-Z0-9_.-]*$"
+    },
+    "upstream": {
+      "$ref": "#/$defs/upstream"
+    },
+    "artifact": {
+      "$ref": "#/$defs/artifact"
+    },
+    "license": {
+      "$ref": "#/$defs/license"
+    },
+    "runtime": {
+      "$ref": "#/$defs/runtime"
+    },
+    "evaluation": {
+      "$ref": "#/$defs/evaluation"
+    },
+    "external_quality_evidence": {
+      "description": "Published quality scores used to prioritize review. They never contribute to the repository-owned quality-v1 score.",
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 32,
+      "items": {
+        "$ref": "#/$defs/externalQualityEvidence"
+      }
+    },
+    "suggested_tasks": {
+      "description": "Advisory discovery and UI labels only. This list never grants dispatch or write authority.",
+      "type": "array",
+      "maxItems": 16,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/taskId"
+      }
+    },
+    "suggested_tasks_advisory": {
+      "const": true
+    },
+    "hardware": {
+      "$ref": "#/$defs/hardware"
+    },
+    "promotion": {
+      "$ref": "#/$defs/promotion"
+    }
+  },
+  "$defs": {
+    "modelId": {
+      "type": "string",
+      "minLength": 2,
+      "maxLength": 128,
+      "pattern": "^[a-z0-9][a-z0-9._-]*$"
+    },
+    "releaseId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 96,
+      "pattern": "^[a-z0-9][a-z0-9._-]*$"
+    },
+    "taskId": {
+      "type": "string",
+      "minLength": 2,
+      "maxLength": 64,
+      "pattern": "^[a-z][a-z0-9_-]*$"
+    },
+    "taskContractId": {
+      "type": "string",
+      "enum": [
+        "intent_routing-v1",
+        "grounded_summary-v1",
+        "grounded_answer-v1",
+        "safety_boundary-v1"
+      ]
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "safeRelativePath": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 320,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*(?:/[A-Za-z0-9][A-Za-z0-9._-]*)*$"
+    },
+    "upstream": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "repository",
+        "revision",
+        "source_path"
+      ],
+      "properties": {
+        "repository": {
+          "description": "Host/namespace/repository identifier, never a download URL.",
+          "type": "string",
+          "maxLength": 240,
+          "pattern": "^[a-z0-9.-]+/[A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9][A-Za-z0-9._-]*$"
+        },
+        "revision": {
+          "description": "Immutable upstream commit or content revision.",
+          "type": "string",
+          "pattern": "^[0-9a-f]{40,64}$"
+        },
+        "source_path": {
+          "$ref": "#/$defs/safeRelativePath"
+        }
+      }
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "sha256",
+        "size_bytes",
+        "format",
+        "media_type"
+      ],
+      "properties": {
+        "path": {
+          "description": "Exact mirror-relative model path. Tooling must also prove that the embedded digest equals sha256.",
+          "type": "string",
+          "pattern": "^models/sha256/[0-9a-f]{64}/model\\.gguf$"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "size_bytes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "format": {
+          "const": "gguf"
+        },
+        "media_type": {
+          "type": "string",
+          "enum": [
+            "application/octet-stream",
+            "application/vnd.gguf"
+          ]
+        }
+      }
+    },
+    "license": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "spdx",
+        "upstream_file",
+        "repository_path",
+        "path",
+        "sha256",
+        "size_bytes",
+        "redistribution_allowed",
+        "commercial_use_allowed",
+        "attribution_required",
+        "notice_files"
+      ],
+      "properties": {
+        "spdx": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 80,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9.+-]*$"
+        },
+        "upstream_file": {
+          "$ref": "#/$defs/safeRelativePath"
+        },
+        "repository_path": {
+          "type": "string",
+          "pattern": "^models/[a-z0-9][a-z0-9._-]*/LICENSE$"
+        },
+        "path": {
+          "type": "string",
+          "pattern": "^licenses/[0-9a-f]{64}/LICENSE$"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "size_bytes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "redistribution_allowed": {
+          "const": true
+        },
+        "commercial_use_allowed": {
+          "const": true
+        },
+        "attribution_required": {
+          "type": "boolean"
+        },
+        "notice_files": {
+          "type": "array",
+          "maxItems": 16,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/safeRelativePath"
+          }
+        }
+      }
+    },
+    "runtime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "runtime_id",
+        "version",
+        "revision",
+        "manifest_path",
+        "manifest_sha256",
+        "api_contract",
+        "allowlist_policy"
+      ],
+      "properties": {
+        "runtime_id": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 64,
+          "pattern": "^[a-z0-9][a-z0-9._-]*$"
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9.+_-]*$"
+        },
+        "revision": {
+          "description": "Immutable runtime upstream revision.",
+          "type": "string",
+          "pattern": "^[0-9a-f]{40,64}$"
+        },
+        "manifest_path": {
+          "description": "Repository-relative exact reviewed runtime manifest; never a package URL.",
+          "type": "string",
+          "pattern": "^runtimes/[a-z0-9][a-z0-9._-]*/manifest\\.json$"
+        },
+        "manifest_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "api_contract": {
+          "const": "openai-chat-completions-loopback"
+        },
+        "allowlist_policy": {
+          "const": "runtime-allowlist-v1"
+        }
+      }
+    },
+    "evaluation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "suite_id",
+        "suite_sha256",
+        "policy_id",
+        "result_path",
+        "task_contracts"
+      ],
+      "properties": {
+        "suite_id": {
+          "const": "quality-v1"
+        },
+        "suite_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "policy_id": {
+          "const": "promotion-v1"
+        },
+        "result_path": {
+          "description": "Content-addressed result path. Tooling must prove the directory digest equals artifact.sha256.",
+          "type": "string",
+          "pattern": "^results/[0-9a-f]{64}/result\\.json$"
+        },
+        "task_contracts": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 4,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/taskContractId"
+          }
+        }
+      }
+    },
+    "externalQualityEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_url",
+        "source_kind",
+        "reported_model",
+        "coverage",
+        "benchmark",
+        "metric",
+        "score",
+        "higher_is_better"
+      ],
+      "properties": {
+        "source_url": {
+          "type": "string",
+          "format": "uri",
+          "pattern": "^https://"
+        },
+        "source_kind": {
+          "enum": [
+            "publisher_report",
+            "independent_benchmark",
+            "public_leaderboard"
+          ]
+        },
+        "reported_model": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160,
+          "pattern": "^[^\\r\\n]+$"
+        },
+        "coverage": {
+          "description": "Whether the cited score covers these exact mirrored bytes, their unquantized parent, or only the wider family.",
+          "enum": [
+            "exact_artifact",
+            "parent_model",
+            "model_family"
+          ]
+        },
+        "benchmark": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120,
+          "pattern": "^[^\\r\\n]+$"
+        },
+        "metric": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120,
+          "pattern": "^[^\\r\\n]+$"
+        },
+        "score": {
+          "description": "Exact decimal text; signed catalogs contain no floating-point JSON values.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$"
+        },
+        "higher_is_better": {
+          "type": "boolean"
+        },
+        "notes": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "pattern": "^[^\\r\\n]+$"
+        }
+      }
+    },
+    "hardwareRequirement": {
+      "description": "Publisher-supplied advisory requirement only; never a measured benchmark.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_url",
+        "coverage"
+      ],
+      "properties": {
+        "ram_bytes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "storage_bytes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "gpu_vram_bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "cpu_architectures": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "enum": [
+              "x86_64",
+              "arm64"
+            ]
+          }
+        },
+        "notes": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "source_url": {
+          "type": "string",
+          "format": "uri",
+          "pattern": "^https://"
+        },
+        "coverage": {
+          "enum": [
+            "exact_artifact",
+            "parent_model",
+            "model_family"
+          ]
+        }
+      }
+    },
+    "hardware": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "publisher_minimum",
+        "publisher_recommended"
+      ],
+      "properties": {
+        "publisher_minimum": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/hardwareRequirement"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "publisher_recommended": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/hardwareRequirement"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "promotion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "policy_id",
+        "channel",
+        "status",
+        "human_review_required",
+        "approved_task_contracts"
+      ],
+      "properties": {
+        "policy_id": {
+          "const": "promotion-v1"
+        },
+        "channel": {
+          "type": "string",
+          "enum": [
+            "candidate",
+            "beta",
+            "stable"
+          ]
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "quarantined",
+            "verified",
+            "evaluation_passed",
+            "approved",
+            "rejected",
+            "deprecated",
+            "revoked"
+          ]
+        },
+        "human_review_required": {
+          "const": true
+        },
+        "approved_task_contracts": {
+          "description": "Human-approved subset of evaluated task contracts. Suggested tasks are never copied here automatically.",
+          "type": "array",
+          "maxItems": 4,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/taskContractId"
+          }
+        },
+        "review_reference": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160,
+          "pattern": "^[^\\r\\n]+$"
+        }
+      }
+    }
+  }
+}

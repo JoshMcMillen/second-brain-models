@@ -1,0 +1,186 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://second-brain.local/schemas/runtime-v1.schema.json",
+  "title": "Second Brain pinned local runtime manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "runtime_id", "version", "upstream", "api_contract",
+    "packages", "license", "local_only", "no_egress_evidence", "human_review"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "runtime_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{1,63}$"},
+    "version": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9.+_-]{0,63}$"},
+    "upstream": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repository", "revision"],
+      "properties": {
+        "repository": {"type": "string", "pattern": "^[a-z0-9.-]+/[A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9][A-Za-z0-9._-]*$"},
+        "revision": {"type": "string", "pattern": "^[0-9a-f]{40,64}$"}
+      }
+    },
+    "api_contract": {"const": "openai-chat-completions-loopback"},
+    "packages": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 8,
+      "uniqueItems": true,
+      "items": {"$ref": "#/$defs/package"}
+    },
+    "license": {"$ref": "#/$defs/license"},
+    "local_only": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "bind_hosts", "telemetry_enabled", "runtime_discovery_enabled",
+        "automatic_model_pull_enabled", "remote_backend_enabled",
+        "cloud_offload_enabled", "cloud_fallback_enabled"
+      ],
+      "properties": {
+        "bind_hosts": {
+          "type": "array", "minItems": 1, "uniqueItems": true,
+          "items": {"enum": ["127.0.0.1", "localhost", "::1"]}
+        },
+        "telemetry_enabled": {"const": false},
+        "runtime_discovery_enabled": {"const": false},
+        "automatic_model_pull_enabled": {"const": false},
+        "remote_backend_enabled": {"const": false},
+        "cloud_offload_enabled": {"const": false},
+        "cloud_fallback_enabled": {"const": false}
+      }
+    },
+    "no_egress_evidence": {
+      "description": "Evidence is package-specific. Quarantined candidates may be empty; approved runtimes require one passing record for every published platform/package SHA-256.",
+      "type": "array",
+      "minItems": 0,
+      "maxItems": 8,
+      "uniqueItems": true,
+      "items": {"$ref": "#/$defs/evidence"}
+    },
+    "human_review": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["required", "status"],
+      "properties": {
+        "required": {"const": true},
+        "status": {"enum": ["candidate", "approved", "rejected", "revoked"]},
+        "review_reference": {
+          "oneOf": [
+            {"type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[^\\r\\n]+$"},
+            {"type": "null"}
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {"status": {"enum": ["approved", "rejected", "revoked"]}},
+            "required": ["status"]
+          },
+          "then": {
+            "required": ["review_reference"],
+            "properties": {
+              "review_reference": {"type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[^\\r\\n]+$"}
+            }
+          }
+        }
+      ]
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "human_review": {
+            "properties": {"status": {"const": "approved"}},
+            "required": ["status"]
+          }
+        },
+        "required": ["human_review"]
+      },
+      "then": {
+        "properties": {
+          "no_egress_evidence": {"minItems": 1}
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "platform": {"enum": ["windows-x86_64", "windows-arm64", "macos-x86_64", "macos-arm64", "linux-x86_64", "linux-arm64"]},
+    "license": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "spdx", "upstream_file", "repository_path", "path", "sha256", "size_bytes",
+        "redistribution_allowed", "commercial_use_allowed", "attribution_required", "notice_files"
+      ],
+      "properties": {
+        "spdx": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9.+-]{1,79}$"},
+        "upstream_file": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*(?:/[A-Za-z0-9][A-Za-z0-9._-]*)*$"},
+        "repository_path": {"type": "string", "pattern": "^runtimes/[a-z0-9][a-z0-9._-]*/LICENSE$"},
+        "path": {"type": "string", "pattern": "^licenses/[0-9a-f]{64}/LICENSE$"},
+        "sha256": {"$ref": "#/$defs/sha256"},
+        "size_bytes": {"type": "integer", "minimum": 1},
+        "redistribution_allowed": {"const": true},
+        "commercial_use_allowed": {"const": true},
+        "attribution_required": {"type": "boolean"},
+        "notice_files": {
+          "type": "array", "maxItems": 16, "uniqueItems": true,
+          "items": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*(?:/[A-Za-z0-9][A-Za-z0-9._-]*)*$"}
+        }
+      }
+    },
+    "package": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["platform", "upstream_url", "url", "path", "sha256", "size_bytes", "format", "media_type", "executable_path"],
+      "properties": {
+        "platform": {"$ref": "#/$defs/platform"},
+        "upstream_url": {
+          "description": "Immutable official publisher package URL retained for provenance only; clients install from the mirrored URL.",
+          "type": "string",
+          "format": "uri",
+          "maxLength": 500,
+          "pattern": "^https://[^\\s]+$"
+        },
+        "url": {"type": "string", "pattern": "^https://models\\.avnxmcp\\.org/runtimes/sha256/[0-9a-f]{64}/[A-Za-z0-9][A-Za-z0-9._-]{0,159}$"},
+        "path": {"type": "string", "pattern": "^runtimes/sha256/[0-9a-f]{64}/[A-Za-z0-9][A-Za-z0-9._-]{0,159}$"},
+        "sha256": {"$ref": "#/$defs/sha256"},
+        "size_bytes": {"type": "integer", "minimum": 1},
+        "format": {"enum": ["zip", "tar.gz"]},
+        "media_type": {"enum": ["application/zip", "application/gzip"]}
+        ,
+        "executable_path": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*(?:/[A-Za-z0-9][A-Za-z0-9._-]*){0,8}$"}
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "platform", "package_sha256", "network_mode", "monitor_method",
+        "monitor_started_before_runtime", "network_attempts_observed",
+        "attempted_dns", "attempted_tcp", "attempted_udp",
+        "monitor_evidence_sha256", "loopback_runtime_reachable", "verified_at",
+        "isolation_id"
+      ],
+      "properties": {
+        "platform": {"$ref": "#/$defs/platform"},
+        "package_sha256": {"$ref": "#/$defs/sha256"},
+        "network_mode": {"const": "none"},
+        "monitor_method": {"enum": ["strace-network-syscalls", "etw-network-events", "sandbox-network-log"]},
+        "monitor_started_before_runtime": {"const": true},
+        "network_attempts_observed": {"const": 0},
+        "attempted_dns": {"const": 0},
+        "attempted_tcp": {"const": 0},
+        "attempted_udp": {"const": 0},
+        "monitor_evidence_sha256": {"$ref": "#/$defs/sha256"},
+        "loopback_runtime_reachable": {"const": true},
+        "verified_at": {"type": "string", "format": "date-time"},
+        "isolation_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{2,159}$"}
+      }
+    }
+  }
+}

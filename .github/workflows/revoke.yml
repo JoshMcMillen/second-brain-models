@@ -1,0 +1,87 @@
+name: Revoke model artifact
+
+on:
+  workflow_dispatch:
+    inputs:
+      manifest_path:
+        description: Exact manifest to revoke
+        required: true
+        type: string
+      reason_code:
+        description: promotion-v1 revocation reason code
+        required: true
+        type: choice
+        options:
+          - artifact_hash_mismatch
+          - upstream_provenance_failure
+          - license_withdrawn_or_incompatible
+          - runtime_security_issue
+          - evaluation_regression
+          - hidden_network_or_cloud_behavior
+      advisory:
+        description: Concise user-facing advisory
+        required: true
+        type: string
+      review_reference:
+        description: Human approval/audit reference
+        required: true
+        type: string
+      replacement_sha256:
+        description: Optional known-good model digest
+        required: false
+        type: string
+      catalog_version:
+        description: New monotonic catalog version
+        required: true
+        type: number
+
+permissions:
+  contents: read
+
+concurrency:
+  group: model-catalog-revocation
+  cancel-in-progress: false
+
+jobs:
+  revoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: model-publish
+    env:
+      INPUT_MANIFEST_PATH: ${{ inputs.manifest_path }}
+      INPUT_REASON_CODE: ${{ inputs.reason_code }}
+      INPUT_ADVISORY: ${{ inputs.advisory }}
+      INPUT_REVIEW_REFERENCE: ${{ inputs.review_reference }}
+      INPUT_REPLACEMENT_SHA256: ${{ inputs.replacement_sha256 }}
+      INPUT_CATALOG_VERSION: ${{ inputs.catalog_version }}
+      DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: "3.13"
+          cache: pip
+      - run: python -m pip install .
+      - name: Create and sign revocation, then rebuild catalog
+        env:
+          CATALOG_SIGNING_KEY_B64: ${{ secrets.CATALOG_SIGNING_KEY_B64 }}
+        run: |
+          test -s keys/public/catalog-release-v1.pem
+          digest=$(python -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["artifact"]["sha256"])' "$INPUT_MANIFEST_PATH")
+          mkdir -p revocations catalog
+          args=(--repo-root . --manifest "$INPUT_MANIFEST_PATH" --reason-code "$INPUT_REASON_CODE" --advisory "$INPUT_ADVISORY" --review-reference "$INPUT_REVIEW_REFERENCE" --output "revocations/$digest.json")
+          if [ -n "$INPUT_REPLACEMENT_SHA256" ]; then args+=(--replacement-sha256 "$INPUT_REPLACEMENT_SHA256"); fi
+          sb-models revoke "${args[@]}"
+          sb-models sign --document "revocations/$digest.json" --signature "revocations/$digest.json.sig" --key-env CATALOG_SIGNING_KEY_B64
+          sb-models build-catalog --repo-root . --channel revoked --catalog-version "$INPUT_CATALOG_VERSION" --public-key keys/public/catalog-release-v1.pem --output catalog/revoked.json
+          sb-models sign --document catalog/revoked.json --signature catalog/revoked.json.sig --key-env CATALOG_SIGNING_KEY_B64
+          sb-models verify --document catalog/revoked.json --signature catalog/revoked.json.sig --public-key keys/public/catalog-release-v1.pem
+      - name: Revocation publication disabled until public R2 verification is implemented
+        run: |
+          echo "FAIL CLOSED: committing a revocation without publishing and re-verifying the signed public revoked catalog could create false confidence." >&2
+          echo "See docs/publishing-interface-v1.md." >&2
+          exit 1

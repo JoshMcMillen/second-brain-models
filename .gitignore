@@ -1,0 +1,42 @@
+# Model weights and converted runtime artifacts must never be committed.
+*.gguf
+*.safetensors
+*.bin
+*.pt
+*.pth
+*.ckpt
+*.onnx
+*.mlmodel
+*.mlpackage
+
+# Candidate downloads and generated staging data.
+.cache/
+artifacts/
+downloads/
+staging/
+tmp/
+*.partial
+*.part
+
+# Credentials and private signing material.
+.env
+.env.*
+!.env.example
+.secrets/
+keys/private/
+*-private.pem
+*-private.pem.b64
+*-private.b64
+*.seed
+*.sig.bin
+
+# Tool caches and local environments.
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.wrangler/
+.venv/
+*.egg-info/
+node_modules/
+.DS_Store
+Thumbs.db

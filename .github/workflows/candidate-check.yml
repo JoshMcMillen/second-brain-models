@@ -1,0 +1,111 @@
+name: Check model candidate
+
+on:
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      manifest_path:
+        description: Reviewed manifest path on the protected default branch
+        required: true
+        type: string
+      artifact_run_id:
+        description: Workflow run containing the privately staged model artifact
+        required: true
+        type: string
+      artifact_name:
+        description: Exact GitHub artifact name containing models/sha256/...
+        required: true
+        type: string
+      runtime_manifest_path:
+        description: Exact runtime manifest in the protected default branch
+        required: true
+        type: string
+      platform:
+        description: Exact runtime package platform in the staged bundle
+        required: true
+        type: choice
+        options: [linux-x86_64, linux-arm64, windows-x86_64, windows-arm64, macos-x86_64, macos-arm64]
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  untrusted-change-checks:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out protected base tooling
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: trusted
+          persist-credentials: false
+      - name: Check out proposed files as untrusted data
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          path: untrusted
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: "3.13"
+          cache: pip
+      - name: Install exact test dependencies
+        run: python -m pip install './trusted[test]'
+      - name: Validate declarative files and hostile fixtures
+        run: |
+          audit_root="$RUNNER_TEMP/protected-contract-audit"
+          mkdir -p "$audit_root"
+          cp -a trusted/policy trusted/schemas trusted/evals "$audit_root/"
+          for item in models runtimes results catalog revocations; do
+            if [ -e "untrusted/$item" ]; then cp -a "untrusted/$item" "$audit_root/"; fi
+          done
+          sb-models repo-check --repo-root "$audit_root"
+          sb-models proposed-contract-check --proposal-root untrusted
+          python -m pytest trusted/tests
+
+  exact-artifact-check:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      INPUT_MANIFEST_PATH: ${{ inputs.manifest_path }}
+      INPUT_RUNTIME_MANIFEST_PATH: ${{ inputs.runtime_manifest_path }}
+      INPUT_PLATFORM: ${{ inputs.platform }}
+      INPUT_ARTIFACT_RUN_ID: ${{ inputs.artifact_run_id }}
+      INPUT_ARTIFACT_NAME: ${{ inputs.artifact_name }}
+    steps:
+      - name: Check out protected default-branch policy
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: "3.13"
+          cache: pip
+      - run: python -m pip install .
+      - name: Download privately staged bytes from the named trusted run
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: ${{ env.INPUT_ARTIFACT_NAME }}
+          path: ${{ runner.temp }}/candidate
+          run-id: ${{ env.INPUT_ARTIFACT_RUN_ID }}
+          github-token: ${{ github.token }}
+      - name: Static exact-artifact admission check
+        run: |
+          sb-models candidate-check --repo-root . --manifest "$INPUT_MANIFEST_PATH" --artifact-root "$RUNNER_TEMP/candidate" --report candidate-check.json
+          sb-models runtime-package-check --repo-root . --runtime-manifest "$INPUT_RUNTIME_MANIFEST_PATH" --package-root "$RUNNER_TEMP/candidate" --platform "$INPUT_PLATFORM" --report runtime-package-check.json
+      - name: Retain exact check receipt
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: checked-model-${{ github.run_id }}
+          path: |
+            candidate-check.json
+            runtime-package-check.json
+            ${{ runner.temp }}/candidate/models/sha256/**/model.gguf
+            ${{ runner.temp }}/candidate/runtimes/sha256/**
+          if-no-files-found: error
+          retention-days: 7

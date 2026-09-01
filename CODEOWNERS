@@ -1,0 +1,14 @@
+# Replace this placeholder with the repository owner's GitHub handle or team
+# before enabling required CODEOWNERS review.
+* @JoshMcMillen
+
+# Changes to trust, publication, and consumer-contract surfaces always require
+# the designated owner or security team.
+/.github/ @JoshMcMillen
+/policy/ @JoshMcMillen
+/schemas/ @JoshMcMillen
+/catalog/ @JoshMcMillen
+/SECURITY.md @JoshMcMillen
+/docs/consumer-contract-v1.md @JoshMcMillen
+/docs/promotion-policy.md @JoshMcMillen
+/docs/signing-runbook.md @JoshMcMillen

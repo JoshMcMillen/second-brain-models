@@ -1,0 +1,111 @@
+name: Evaluate reviewed local model
+
+on:
+  pull_request:
+    paths:
+      - "evals/**"
+      - "models/**"
+      - "runtimes/**"
+      - "policy/promotion-v1.yaml"
+      - "schemas/result-v1.schema.json"
+      - "src/second_brain_models/evaluation.py"
+      - "src/second_brain_models/network_monitor.py"
+      - "src/second_brain_models/noegress.py"
+      - "tests/**"
+      - ".github/workflows/evaluate.yml"
+  workflow_dispatch:
+    inputs:
+      manifest_path:
+        description: Exact reviewed model manifest on the protected default branch
+        required: true
+        type: string
+      predictions_artifact_run_id:
+        description: Trusted isolated-run artifact containing predictions.jsonl and strace logs
+        required: true
+        type: string
+      predictions_artifact_name:
+        description: Exact isolated-run artifact name
+        required: true
+        type: string
+      runtime_version:
+        description: Exact runtime version matching the pinned runtime manifest
+        required: true
+        type: string
+      runtime_port:
+        description: Loopback port of the still-running runtime in the isolated runner
+        required: true
+        default: "8080"
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  evaluator-contract:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out protected base evaluator
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: trusted
+          persist-credentials: false
+      - name: Check out proposed fixtures/policy as untrusted data
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          path: untrusted
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: "3.13"
+          cache: pip
+      - run: python -m pip install './trusted[test]'
+      - run: |
+          audit_root="$RUNNER_TEMP/protected-contract-audit"
+          mkdir -p "$audit_root"
+          cp -a trusted/policy trusted/schemas trusted/evals "$audit_root/"
+          for item in models runtimes results catalog revocations; do
+            if [ -e "untrusted/$item" ]; then cp -a "untrusted/$item" "$audit_root/"; fi
+          done
+          sb-models repo-check --repo-root "$audit_root"
+          sb-models proposed-contract-check --proposal-root untrusted
+          python -m pytest trusted/tests/test_evaluation.py trusted/tests/test_network_monitor.py
+
+  disconnected-evaluation-not-yet-enabled:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: model-evaluation
+    env:
+      INPUT_MANIFEST_PATH: ${{ inputs.manifest_path }}
+      INPUT_PREDICTIONS_ARTIFACT_RUN_ID: ${{ inputs.predictions_artifact_run_id }}
+      INPUT_PREDICTIONS_ARTIFACT_NAME: ${{ inputs.predictions_artifact_name }}
+      INPUT_RUNTIME_VERSION: ${{ inputs.runtime_version }}
+      INPUT_RUNTIME_PORT: ${{ inputs.runtime_port }}
+    steps:
+      - name: Check out protected evaluator and policy
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: "3.13"
+          cache: pip
+      - run: python -m pip install .
+      - name: Download trusted isolated runtime receipt
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: ${{ env.INPUT_PREDICTIONS_ARTIFACT_NAME }}
+          path: ${{ runner.temp }}/isolated-run
+          run-id: ${{ env.INPUT_PREDICTIONS_ARTIFACT_RUN_ID }}
+          github-token: ${{ github.token }}
+      - name: Evaluation disabled until this job owns runtime startup and syscall tracing
+        run: |
+          echo "FAIL CLOSED: imported predictions or trace receipts cannot qualify a model." >&2
+          echo "Enable only after this protected job starts the exact pinned runtime in a no-network namespace and monitors DNS/TCP/UDP from startup through inference." >&2
+          exit 1

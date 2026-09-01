@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools==80.9.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "second-brain-models"
+version = "0.1.0"
+description = "Validation, evaluation, signing, and release tooling for the Second Brain local-model catalog"
+requires-python = ">=3.11"
+dependencies = [
+  "cryptography==45.0.7",
+  "jsonschema==4.25.1",
+  "PyYAML==6.0.2",
+]
+
+[project.optional-dependencies]
+test = ["pytest==8.4.2"]
+
+[project.scripts]
+sb-models = "second_brain_models.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+addopts = "-q"
+testpaths = ["tests"]

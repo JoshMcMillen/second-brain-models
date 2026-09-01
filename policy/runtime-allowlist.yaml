@@ -1,0 +1,110 @@
+schema_version: 1
+policy_id: runtime-allowlist-v1
+default_decision: deny
+
+purpose: >-
+  Runtime families listed here are discoverable candidates only. Installation
+  requires a separately reviewed immutable runtime manifest, exact version and
+  revision, per-platform package digest, and no-egress evidence. A family entry
+  never permits model discovery, remote pulls, cloud offload, telemetry, or
+  fallback.
+
+local_only_contract:
+  endpoint_hosts:
+    - 127.0.0.1
+    - localhost
+    - "::1"
+  endpoint_path: /v1/chat/completions
+  explicit_port_required: true
+  redirects_allowed: false
+  environment_proxies_allowed: false
+  runtime_discovery_allowed: false
+  automatic_model_pull_allowed: false
+  remote_backend_allowed: false
+  cloud_offload_allowed: false
+  telemetry_allowed: false
+  cloud_fallback_allowed: false
+  artifact_hash_check_required_before_load: true
+  install_source: mirrored_signed_packages_only
+
+allowed_runtime_families:
+  - runtime_id: llama.cpp-server
+    publisher_repository: github.com/ggml-org/llama.cpp
+    decision: candidate_review_only
+    artifact_formats:
+      - gguf
+    api_contract: openai-chat-completions-loopback
+    platforms:
+      - windows-x86_64
+      - windows-arm64
+      - macos-x86_64
+      - macos-arm64
+      - linux-x86_64
+      - linux-arm64
+    forbidden_features:
+      - remote-model-url
+      - hugging-face-auto-download
+  - runtime_id: ollama
+    publisher_repository: github.com/ollama/ollama
+    decision: candidate_review_only
+    artifact_formats:
+      - gguf
+    api_contract: openai-chat-completions-loopback
+    platforms:
+      - windows-x86_64
+      - macos-arm64
+      - linux-x86_64
+      - linux-arm64
+    forbidden_features:
+      - registry-auto-pull
+      - cloud-model
+      - remote-host-binding
+  - runtime_id: lm-studio
+    publisher_repository: lmstudio.ai/LMStudio/desktop
+    decision: candidate_review_only
+    artifact_formats:
+      - gguf
+    api_contract: openai-chat-completions-loopback
+    platforms:
+      - windows-x86_64
+      - macos-arm64
+      - linux-x86_64
+      - linux-arm64
+    forbidden_features:
+      - bionic-cloud
+      - cloud-model
+      - remote-mcp
+      - remote-host-binding
+  - runtime_id: lemonade-server
+    publisher_repository: github.com/lemonade-sdk/lemonade
+    decision: candidate_review_only
+    artifact_formats:
+      - gguf
+    api_contract: openai-chat-completions-loopback
+    platforms:
+      - windows-x86_64
+      - macos-arm64
+      - linux-x86_64
+      - linux-arm64
+    forbidden_features:
+      - cloud-offload
+      - remote-backend
+      - automatic-model-pull
+      - telemetry
+
+approved_runtime_manifests: []
+
+admission_rules:
+  generic_family_approval_allowed: false
+  exact_runtime_manifest_reference_required: true
+  runtime_manifest_schema: runtime-v1
+  runtime_id_version_revision_must_match: true
+  runtime_manifest_sha256_required: true
+  official_upstream_package_url_required: true
+  platform_package_sha256_required: true
+  runtime_no_egress_evidence_required: true
+  every_installable_package_requires_matching_no_egress_evidence: true
+  runtime_human_review_required: true
+  only_approved_runtime_manifests_are_installable: true
+  forbidden_features_must_be_disabled: true
+  inability_to_prove_local_only_mode: deny

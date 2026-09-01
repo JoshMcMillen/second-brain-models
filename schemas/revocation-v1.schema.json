@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://second-brain.local/schemas/revocation-v1.schema.json",
+  "title": "Second Brain model revocation v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "revocation_id",
+    "model_id",
+    "release",
+    "artifact_sha256",
+    "manifest_sha256",
+    "result_sha256",
+    "reason_code",
+    "advisory",
+    "revoked_at",
+    "replacement_sha256",
+    "review_reference"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "revocation_id": {
+      "type": "string",
+      "pattern": "^revocation-[0-9a-f]{64}$"
+    },
+    "model_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]{1,127}$"
+    },
+    "release": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]{0,95}$"
+    },
+    "artifact_sha256": {"$ref": "#/$defs/sha256"},
+    "manifest_sha256": {"$ref": "#/$defs/sha256"},
+    "result_sha256": {"$ref": "#/$defs/sha256"},
+    "reason_code": {
+      "type": "string",
+      "enum": [
+        "artifact_hash_mismatch",
+        "upstream_provenance_failure",
+        "license_withdrawn_or_incompatible",
+        "runtime_security_issue",
+        "evaluation_regression",
+        "hidden_network_or_cloud_behavior"
+      ]
+    },
+    "advisory": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 500,
+      "pattern": "^[^\\r\\n]+$"
+    },
+    "revoked_at": {"type": "string", "format": "date-time"},
+    "replacement_sha256": {
+      "oneOf": [
+        {"$ref": "#/$defs/sha256"},
+        {"type": "null"}
+      ]
+    },
+    "review_reference": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 160,
+      "pattern": "^[^\\r\\n]+$"
+    }
+  },
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+  }
+}

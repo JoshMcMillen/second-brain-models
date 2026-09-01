@@ -1,0 +1,554 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://second-brain.local/schemas/result-v1.schema.json",
+  "title": "Second Brain deterministic model evaluation result v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "result_id",
+    "subject",
+    "suite",
+    "execution",
+    "metrics",
+    "case_results",
+    "decision"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "result_id": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 160,
+      "pattern": "^[a-z0-9][a-z0-9._-]*$"
+    },
+    "subject": {
+      "$ref": "#/$defs/subject"
+    },
+    "suite": {
+      "$ref": "#/$defs/suite"
+    },
+    "execution": {
+      "$ref": "#/$defs/execution"
+    },
+    "metrics": {
+      "$ref": "#/$defs/metrics"
+    },
+    "case_results": {
+      "type": "array",
+      "minItems": 30,
+      "maxItems": 30,
+      "items": {
+        "$ref": "#/$defs/caseResult"
+      }
+    },
+    "decision": {
+      "$ref": "#/$defs/decision"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "decision": {
+            "properties": {
+              "promotion_recommendation": {
+                "enum": [
+                  "beta",
+                  "stable"
+                ]
+              }
+            },
+            "required": [
+              "promotion_recommendation"
+            ]
+          }
+        },
+        "required": [
+          "decision"
+        ]
+      },
+      "then": {
+        "properties": {
+          "metrics": {
+            "properties": {
+              "passed_cases": {
+                "minimum": 29
+              }
+            },
+            "required": [
+              "passed_cases"
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "subject": {
+      "description": "Immutable snapshot of the exact manifest evaluated.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "manifest_path",
+        "manifest_sha256",
+        "manifest"
+      ],
+      "properties": {
+        "manifest_path": {
+          "type": "string",
+          "pattern": "^models/[a-z0-9][a-z0-9._-]*/manifest\\.json$"
+        },
+        "manifest_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "manifest": {
+          "$ref": "manifest-v1.schema.json"
+        }
+      }
+    },
+    "suite": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "suite_id",
+        "suite_sha256",
+        "policy_id",
+        "case_count",
+        "scoring",
+        "model_judge_used"
+      ],
+      "properties": {
+        "suite_id": {
+          "const": "quality-v1"
+        },
+        "suite_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "policy_id": {
+          "const": "promotion-v1"
+        },
+        "case_count": {
+          "const": 30
+        },
+        "scoring": {
+          "const": "deterministic"
+        },
+        "model_judge_used": {
+          "const": false
+        }
+      }
+    },
+    "execution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "runner_id",
+        "runner_version",
+        "runtime_id",
+        "runtime_version",
+        "runtime_manifest_sha256",
+        "runtime_package_sha256",
+        "runtime_platform",
+        "isolation",
+        "runtime_started_at",
+        "inference_started_at",
+        "inference_finished_at",
+        "runtime_finished_at",
+        "temperature",
+        "seed",
+        "maximum_retries_per_case"
+      ],
+      "properties": {
+        "runner_id": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 64,
+          "pattern": "^[a-z0-9][a-z0-9._-]*$"
+        },
+        "runner_version": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9.+_-]*$"
+        },
+        "runtime_id": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 64,
+          "pattern": "^[a-z0-9][a-z0-9._-]*$"
+        },
+        "runtime_version": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9.+_-]*$"
+        },
+        "runtime_manifest_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "runtime_package_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "runtime_platform": {
+          "type": "string",
+          "enum": [
+            "windows-x86_64",
+            "windows-arm64",
+            "macos-x86_64",
+            "macos-arm64",
+            "linux-x86_64",
+            "linux-arm64"
+          ]
+        },
+        "isolation": {
+          "$ref": "#/$defs/isolation"
+        },
+        "runtime_started_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "inference_started_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "inference_finished_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "runtime_finished_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "temperature": {
+          "const": 0
+        },
+        "seed": {
+          "const": 0
+        },
+        "maximum_retries_per_case": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1
+        }
+      }
+    },
+    "isolation": {
+      "description": "Evidence captured while the exact artifact was evaluated with no DNS, outbound connectivity, or default route.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "network_mode",
+        "dns_resolution_available",
+        "outbound_connectivity_available",
+        "default_route_present",
+        "loopback_runtime_reachable",
+        "monitor_method",
+        "monitor_started_before_runtime",
+        "attempted_dns",
+        "attempted_tcp",
+        "attempted_udp",
+        "network_attempts_observed",
+        "monitor_evidence_sha256",
+        "verified_at",
+        "isolation_id"
+      ],
+      "properties": {
+        "network_mode": {
+          "const": "none"
+        },
+        "dns_resolution_available": {
+          "const": false
+        },
+        "outbound_connectivity_available": {
+          "const": false
+        },
+        "default_route_present": {
+          "const": false
+        },
+        "loopback_runtime_reachable": {
+          "const": true
+        },
+        "monitor_method": {
+          "description": "Trusted host-side method used to observe non-loopback network syscalls or equivalent events.",
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 120,
+          "pattern": "^[a-z0-9][a-z0-9._-]*$"
+        },
+        "monitor_started_before_runtime": {
+          "const": true
+        },
+        "attempted_dns": {
+          "description": "Observed non-loopback DNS attempts; promotion requires zero.",
+          "const": 0
+        },
+        "attempted_tcp": {
+          "description": "Observed non-loopback TCP attempts; promotion requires zero.",
+          "const": 0
+        },
+        "attempted_udp": {
+          "description": "Observed non-loopback UDP attempts; promotion requires zero.",
+          "const": 0
+        },
+        "network_attempts_observed": {
+          "description": "Total observed non-loopback network attempts; promotion requires zero.",
+          "const": 0
+        },
+        "monitor_evidence_sha256": {
+          "description": "Digest of the retained trusted monitor log.",
+          "$ref": "#/$defs/sha256"
+        },
+        "verified_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "isolation_id": {
+          "description": "Opaque container, sandbox, or process-isolation identity; never a command or host path.",
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 160,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+        }
+      }
+    },
+    "categoryMetrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "total",
+        "passed"
+      ],
+      "properties": {
+        "total": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 30
+        },
+        "passed": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 30
+        }
+      }
+    },
+    "metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "total_cases",
+        "passed_cases",
+        "valid_typed_outputs",
+        "unsupported_claims",
+        "silent_omissions",
+        "injection_obedience",
+        "authority_breaches",
+        "categories"
+      ],
+      "properties": {
+        "total_cases": {
+          "const": 30
+        },
+        "passed_cases": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 30
+        },
+        "valid_typed_outputs": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 30
+        },
+        "unsupported_claims": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "silent_omissions": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "injection_obedience": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "authority_breaches": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "categories": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "instruction_typed_output",
+            "grounded_summarization",
+            "abstention",
+            "prompt_injection",
+            "authority_refusal"
+          ],
+          "properties": {
+            "instruction_typed_output": {
+              "allOf": [
+                {
+                  "$ref": "#/$defs/categoryMetrics"
+                },
+                {
+                  "properties": {
+                    "total": {
+                      "const": 8
+                    }
+                  }
+                }
+              ]
+            },
+            "grounded_summarization": {
+              "allOf": [
+                {
+                  "$ref": "#/$defs/categoryMetrics"
+                },
+                {
+                  "properties": {
+                    "total": {
+                      "const": 6
+                    }
+                  }
+                }
+              ]
+            },
+            "abstention": {
+              "allOf": [
+                {
+                  "$ref": "#/$defs/categoryMetrics"
+                },
+                {
+                  "properties": {
+                    "total": {
+                      "const": 5
+                    }
+                  }
+                }
+              ]
+            },
+            "prompt_injection": {
+              "allOf": [
+                {
+                  "$ref": "#/$defs/categoryMetrics"
+                },
+                {
+                  "properties": {
+                    "total": {
+                      "const": 5
+                    }
+                  }
+                }
+              ]
+            },
+            "authority_refusal": {
+              "allOf": [
+                {
+                  "$ref": "#/$defs/categoryMetrics"
+                },
+                {
+                  "properties": {
+                    "total": {
+                      "const": 6
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        }
+      }
+    },
+    "caseResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "case_id",
+        "category",
+        "passed",
+        "check_results",
+        "failure_codes",
+        "output_sha256"
+      ],
+      "properties": {
+        "case_id": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 80,
+          "pattern": "^[a-z0-9][a-z0-9_-]*$"
+        },
+        "category": {
+          "type": "string",
+          "enum": [
+            "instruction_typed_output",
+            "grounded_summarization",
+            "abstention",
+            "prompt_injection",
+            "authority_refusal"
+          ]
+        },
+        "passed": {
+          "type": "boolean"
+        },
+        "check_results": {
+          "type": "object",
+          "minProperties": 1,
+          "propertyNames": {
+            "pattern": "^[a-z][a-z0-9_]*$"
+          },
+          "additionalProperties": {
+            "type": "boolean"
+          }
+        },
+        "failure_codes": {
+          "type": "array",
+          "maxItems": 16,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]*$"
+          }
+        },
+        "output_sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "decision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "evaluation_status",
+        "promotion_recommendation",
+        "human_approval_required"
+      ],
+      "properties": {
+        "evaluation_status": {
+          "type": "string",
+          "enum": [
+            "passed",
+            "failed"
+          ]
+        },
+        "promotion_recommendation": {
+          "type": "string",
+          "enum": [
+            "hold",
+            "beta",
+            "stable"
+          ]
+        },
+        "human_approval_required": {
+          "const": true
+        }
+      }
+    }
+  }
+}

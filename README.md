@@ -1,0 +1,97 @@
+# Second Brain Models
+
+`second-brain-models` is the separately owned trust and distribution policy repository for local models that may be installed by Second Brain. It does not contain Second Brain application code, model weights, or a remote inference service.
+
+Repository tooling is MIT licensed. Each model and runtime remains governed by the exact upstream license stored beside its quarantined or approved manifest.
+
+The v1 goal is deliberately small:
+
+1. Discover a model only from an allowlisted official publisher.
+2. Pin the exact upstream revision and artifact.
+3. Review provenance and redistribution terms.
+4. Verify the exact artifact's format, size, and SHA-256 digest.
+5. Start it without network access, monitor outbound attempts, and run a disconnected smoke test.
+6. Run the versioned lightweight quality gate.
+7. Require an owner decision before publishing it as beta or stable.
+8. Distribute approved, content-addressed artifacts from Cloudflare R2 under a signed catalog.
+
+This repository is being bootstrapped around this documentation and contract surface. It does not yet publish an installable catalog. The first Qwen/llama.cpp records are metadata-only quarantined candidates; they have not been mirrored, executed, no-egress tested, evaluated, or approved.
+
+## Trust boundary
+
+```text
+Official publisher
+       |
+       v
+GitHub candidate checks -----> private R2 candidate bucket
+       |
+       v
+Owner approval
+       |
+       v
+public R2 release bucket -----> models.avnxmcp.org
+       |
+       v
+signed catalog + exact SHA-256
+       |
+       v
+Second Brain verifies, installs, and runs the model locally
+```
+
+Cloudflare stores and delivers public software artifacts. It is not in the inference path. Prompts, documents, embeddings, model output, local database data, and device-linked telemetry must not be sent to this repository or to Cloudflare by the local-model feature.
+
+## V1 decisions
+
+- GitHub holds policy, manifests, exact adjacent license bytes, small evaluation fixtures, summarized results, and catalog files. Each signed manifest binds its committed license to an immutable public `licenses/<sha256>/LICENSE` path by hash and size.
+- Model weights are never committed to Git.
+- A private R2 bucket stages candidates; a separate public R2 bucket holds approved releases.
+- Approved artifacts use immutable paths based on their SHA-256 digest.
+- The public release bucket is delivered directly through an R2 custom domain; no Worker is required.
+- Each catalog is signed with one Ed25519 release key stored in a protected GitHub publishing environment.
+- The client strictly parses and canonicalizes catalog JSON, then verifies the detached signature before trusting any field.
+- Beta, stable, and revoked are explicit signed catalog states.
+- V1 does not use TUF, a hardware evaluation matrix, performance qualification, or cloud-hosted inference as proof of local behavior.
+- Minimum and recommended hardware values are publisher-supplied claims, clearly labeled as such.
+- Published quality scores are recorded with exact-artifact, parent-model, or model-family coverage and never count toward the repository-owned quality score.
+
+## Repository documentation
+
+- [Consumer contract](docs/consumer-contract-v1.md) defines the only interface exported to Second Brain.
+- [Cloudflare setup](docs/cloudflare-setup.md) defines the two-bucket and custom-domain configuration.
+- [GitHub setup](docs/github-setup.md) records repository protections and deliberately absent release credentials.
+- [Promotion policy](docs/promotion-policy.md) defines candidate, beta, stable, rejected, and revoked decisions.
+- [Signing runbook](docs/signing-runbook.md) defines catalog signing, verification, rotation, and incident handling.
+- [Security policy](SECURITY.md) defines the threat boundary and reporting process.
+
+## Intended repository contents
+
+Future automation may add the following paths without changing the consumer boundary:
+
+```text
+policy/                         allowlists and promotion thresholds
+schemas/                        manifest, result, and catalog schemas
+models/<model-id>/              manifest, LICENSE, and NOTICE
+runtimes/<runtime-family>-<version>/
+                                 pinned runtime manifest, LICENSE, and provenance
+evals/                          small versioned quality fixtures
+results/<artifact-sha256>/result.json
+                                 summarized exact-artifact result
+catalog/                        signed beta, stable, and revoked catalogs
+.github/workflows/              discovery, checks, publishing, revocation
+```
+
+## Contribution rules
+
+- Do not commit model weights, private keys, credentials, raw user content, or model-generated user content.
+- Do not add an upstream source without owner approval and an immutable revision.
+- Do not execute code supplied by a model repository.
+- Treat runtime packages as untrusted archives until their exact digest, safe extraction, local-only configuration, and no-egress evidence pass review.
+- Treat every new artifact, tokenizer, chat template, license change, and quantization as a new candidate.
+- Keep workflow code on the protected default branch. Evaluators must not execute code from candidate pull requests.
+- Publication requires the protected publishing environment and must upload the artifact before updating the catalog.
+
+## Release meaning
+
+"Approved" is task-specific. It means the exact artifact passed this repository's documented provenance, static, no-egress, disconnected smoke, and lightweight quality checks for the listed tasks. It is not a claim that a model is universally safe, accurate, or suitable for autonomous writes.
+
+See [SECURITY.md](SECURITY.md) before reporting a vulnerability or supply-chain concern.

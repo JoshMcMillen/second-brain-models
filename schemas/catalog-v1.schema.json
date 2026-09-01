@@ -1,0 +1,200 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://second-brain.local/schemas/catalog-v1.schema.json",
+  "title": "Second Brain model catalog v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "catalog_id",
+    "catalog_version",
+    "channel",
+    "key_id",
+    "generated_at",
+    "expires_at",
+    "promotion_policy",
+    "entries"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "catalog_id": {
+      "const": "second-brain-models"
+    },
+    "catalog_version": {
+      "description": "Monotonically increasing publication sequence enforced by the catalog publisher and consumer.",
+      "type": "integer",
+      "minimum": 1
+    },
+    "channel": {
+      "type": "string",
+      "enum": [
+        "beta",
+        "stable",
+        "revoked"
+      ]
+    },
+    "key_id": {
+      "description": "Fingerprint of the trusted catalog signing key.",
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "expires_at": {
+      "description": "Catalog freshness boundary; consumers reject a catalog after this instant.",
+      "type": "string",
+      "format": "date-time"
+    },
+    "promotion_policy": {
+      "const": "promotion-v1"
+    },
+    "entries": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/catalogEntry"
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "channel": {
+            "const": "revoked"
+          }
+        },
+        "required": [
+          "channel"
+        ]
+      },
+      "then": {
+        "properties": {
+          "entries": {
+            "items": {
+              "properties": {
+                "availability": {
+                  "const": "revoked"
+                }
+              }
+            }
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "entries": {
+            "items": {
+              "properties": {
+                "availability": {
+                  "const": "installable"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "catalogEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "manifest_path",
+        "manifest_sha256",
+        "result_path",
+        "result_sha256",
+        "runtime_manifest_path",
+        "runtime_manifest_sha256",
+        "availability",
+        "manifest",
+        "runtime_manifest",
+        "revocation"
+      ],
+      "properties": {
+        "manifest_path": {
+          "type": "string",
+          "pattern": "^models/[a-z0-9][a-z0-9._-]*/manifest\\.json$"
+        },
+        "manifest_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "result_path": {
+          "type": "string",
+          "pattern": "^results/[0-9a-f]{64}/result\\.json$"
+        },
+        "result_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "runtime_manifest_path": {
+          "type": "string",
+          "pattern": "^runtimes/[a-z0-9][a-z0-9._-]*/manifest\\.json$"
+        },
+        "runtime_manifest_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "availability": {
+          "type": "string",
+          "enum": [
+            "installable",
+            "revoked"
+          ]
+        },
+        "manifest": {
+          "$ref": "manifest-v1.schema.json"
+        },
+        "runtime_manifest": {
+          "description": "Validated exact runtime snapshot, including platform package digests and per-package no-egress evidence.",
+          "$ref": "runtime-v1.schema.json"
+        },
+        "revocation": {
+          "oneOf": [
+            {
+              "$ref": "revocation-v1.schema.json"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "availability": {
+                "const": "revoked"
+              }
+            },
+            "required": [
+              "availability"
+            ]
+          },
+          "then": {
+            "properties": {
+              "revocation": {
+                "$ref": "revocation-v1.schema.json"
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "revocation": {
+                "type": "null"
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}
