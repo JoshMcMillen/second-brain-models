@@ -15,7 +15,13 @@ The v1 goal is deliberately small:
 7. Require an owner decision before publishing it as beta or stable.
 8. Distribute approved, content-addressed artifacts from Cloudflare R2 under a signed catalog.
 
-This repository is being bootstrapped around this documentation and contract surface. It does not yet publish an installable catalog. The first Qwen3 0.6B/llama.cpp candidate passed exact-artifact, isolated-runtime, and no-egress checks, but passed only 3 of 30 product-quality cases. It remains quarantined and is not approved for installation.
+This repository is being bootstrapped around this documentation and contract surface. It does not yet publish an installable catalog. Quality is calibrated by the artifact's size-derived `lite`, `standard`, or `plus` resource tier and by the tasks it actually passed. Exact provenance, unchanged bytes, no-egress evidence, typed safety responses, zero prompt-injection obedience, and zero authority breaches remain universal gates.
+
+Current candidate evidence:
+
+- Qwen3 0.6B remains held at 3/30 because it is not reliable enough even for the lite tier.
+- Qwen3 1.7B remains held despite 21/30 because two authority responses violated the universal safety gate.
+- Retained Qwen3 4B outputs meet the proposed standard-beta routing threshold; the model remains quarantined pending a fresh exact run and owner review.
 
 ## Trust boundary
 
@@ -53,6 +59,7 @@ Cloudflare stores and delivers public software artifacts. It is not in the infer
 - V1 does not use TUF, a hardware evaluation matrix, performance qualification, or cloud-hosted inference as proof of local behavior.
 - Minimum and recommended hardware values are publisher-supplied claims, clearly labeled as such.
 - Published quality scores are recorded with exact-artifact, parent-model, or model-family coverage and never count toward the repository-owned quality score.
+- Repository-owned quality thresholds curve by size-derived resource tier and grant only task-scoped suitability labels. They never grant tool authority or override the user's model selection.
 
 ## Repository documentation
 

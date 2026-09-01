@@ -7,6 +7,7 @@ import pytest
 from conftest import build_candidate
 from second_brain_models.errors import DocumentError, PolicyError
 from second_brain_models.repository import check_repository
+from second_brain_models.jsonio import load_json, write_canonical
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -64,6 +65,15 @@ def test_repo_check_rejects_floating_external_score(policy_repo: Path, tmp_path:
     manifest["external_quality_evidence"][0]["score"] = 0.9
     manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
     with pytest.raises(DocumentError, match="schema validation"):
+        check_repository(policy_repo)
+
+
+def test_repo_check_rejects_resource_tier_not_matching_artifact_size(policy_repo: Path) -> None:
+    manifest_path, _, _ = build_candidate(policy_repo, external_staging(policy_repo))
+    manifest = load_json(manifest_path)
+    manifest["tier"] = "standard"
+    write_canonical(manifest_path, manifest)
+    with pytest.raises(DocumentError, match="manifest schema validation"):
         check_repository(policy_repo)
 
 
