@@ -9,8 +9,19 @@ from second_brain_models.errors import DocumentError, PolicyError
 from second_brain_models.repository import check_repository
 
 
+REPO_ROOT = Path(__file__).resolve().parents[1]
+
+
 def external_staging(policy_repo: Path) -> Path:
     return policy_repo.parent / f"{policy_repo.name}-external-staging"
+
+
+def test_git_preserves_exact_upstream_license_bytes() -> None:
+    attributes = (REPO_ROOT / ".gitattributes").read_text(encoding="utf-8")
+    assert "LICENSE -text diff whitespace=cr-at-eol" in attributes.splitlines()
+    assert "NOTICE -text diff whitespace=cr-at-eol" in attributes.splitlines()
+    assert "LICENSE text eol=lf" not in attributes.splitlines()
+    assert "NOTICE text eol=lf" not in attributes.splitlines()
 
 
 def test_repo_check_validates_actual_model_and_runtime_documents(policy_repo: Path, tmp_path: Path) -> None:
