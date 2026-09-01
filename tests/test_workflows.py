@@ -52,6 +52,11 @@ def test_privileged_and_candidate_workflows_fail_safe() -> None:
     evaluation_document = yaml.safe_load(evaluation)
     evaluation_triggers = evaluation_document.get("on", evaluation_document.get(True))
     evaluation_job = evaluation_document["jobs"]["evaluate-exact-candidate"]
+    candidate_resolver = next(
+        step["run"]
+        for step in evaluation_job["steps"]
+        if step.get("name") == "Resolve reviewed candidate manifest"
+    )
     assert evaluation_document["permissions"] == {"contents": "read"}
     assert evaluation_triggers["push"] == {
         "branches": ["main"],
@@ -60,6 +65,7 @@ def test_privileged_and_candidate_workflows_fail_safe() -> None:
     assert "github.ref_type == 'branch'" in evaluation_job["if"]
     assert "github.ref == 'refs/heads/main'" in evaluation_job["if"]
     assert "github.ref_protected" in evaluation_job["if"]
+    assert 'if [[ "$GITHUB_EVENT_NAME" == "push" ]] && ! jq -e' in candidate_resolver
     assert evaluation_job["environment"]["name"] == (
         "${{ github.event_name == 'push' && "
         "'model-evaluation-auto' || 'model-evaluation' }}"

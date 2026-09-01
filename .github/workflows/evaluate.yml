@@ -141,7 +141,7 @@ jobs:
             echo "Manifest must be a regular, non-symlink file." >&2
             exit 2
           fi
-          if ! jq -e \
+          if [[ "$GITHUB_EVENT_NAME" == "push" ]] && ! jq -e \
             '(.promotion.channel == "candidate") and (.promotion.status == "quarantined")' \
             "$manifest_path" > /dev/null; then
             echo "Automatic evaluation accepts only a quarantined candidate manifest." >&2
