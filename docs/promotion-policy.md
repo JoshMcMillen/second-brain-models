@@ -56,6 +56,8 @@ V1 permits GGUF model artifacts. The check must reject:
 
 Checks must inspect the exact artifact later published. Upstream code must not execute.
 
+The archive and symlink prohibition above applies to the model artifact. Exact-hash runtime packages have a separate guarded extractor. It may accept only relative TAR alias chains that stay inside the reviewed archive and terminate at a regular file; each alias is materialized as a new regular-file copy. The extracted runtime tree never contains symlinks, and absolute, traversing, missing, cyclic, hard, directory, ZIP, or special links remain forbidden.
+
 ### No-egress and disconnected smoke test
 
 After all downloads finish, start the exact reviewed runtime package with the candidate artifact in an environment with networking disabled. Start a trusted host-side network monitor before the runtime and retain the monitor log by SHA-256.
