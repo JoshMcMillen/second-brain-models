@@ -12,10 +12,10 @@ from .errors import EvaluationError
 
 
 def _interfaces() -> list[str]:
-    sysfs = Path("/sys/class/net")
-    if sysfs.is_dir():
-        return sorted(entry.name for entry in sysfs.iterdir())
-    return []
+    try:
+        return sorted(name for _, name in socket.if_nameindex())
+    except OSError:
+        return []
 
 
 def _has_default_route() -> bool:

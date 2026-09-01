@@ -1,12 +1,18 @@
 from __future__ import annotations
 
 from pathlib import Path
+import socket
 
 import pytest
 
 from second_brain_models.errors import EvaluationError
 from second_brain_models.network_monitor import check_strace_logs
-from second_brain_models.noegress import merge_no_egress_evidence
+from second_brain_models.noegress import _interfaces, merge_no_egress_evidence
+
+
+def test_interface_probe_uses_live_namespace_enumeration(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(socket, "if_nameindex", lambda: [(1, "lo")])
+    assert _interfaces() == ["lo"]
 
 
 def test_monitor_accepts_loopback_server_without_outbound_attempts(tmp_path: Path) -> None:
