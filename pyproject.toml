@@ -14,7 +14,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-test = ["pytest==8.4.2"]
+test = ["pytest==9.1.1"]
 
 [project.scripts]
 sb-models = "second_brain_models.cli:main"
