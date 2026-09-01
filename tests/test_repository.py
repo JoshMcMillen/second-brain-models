@@ -18,8 +18,8 @@ def external_staging(policy_repo: Path) -> Path:
 
 def test_git_preserves_exact_upstream_license_bytes() -> None:
     attributes = (REPO_ROOT / ".gitattributes").read_text(encoding="utf-8")
-    assert "LICENSE -text -diff" in attributes.splitlines()
-    assert "NOTICE -text -diff" in attributes.splitlines()
+    assert "LICENSE -text diff whitespace=cr-at-eol" in attributes.splitlines()
+    assert "NOTICE -text diff whitespace=cr-at-eol" in attributes.splitlines()
     assert "LICENSE text eol=lf" not in attributes.splitlines()
     assert "NOTICE text eol=lf" not in attributes.splitlines()
 

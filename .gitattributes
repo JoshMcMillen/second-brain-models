@@ -6,8 +6,8 @@
 *.yaml text eol=lf
 *.yml text eol=lf
 *.md text eol=lf
-LICENSE -text -diff
-NOTICE -text -diff
+LICENSE -text diff whitespace=cr-at-eol
+NOTICE -text diff whitespace=cr-at-eol
 *.pem text eol=lf
 *.sig text eol=lf
 
