@@ -29,5 +29,7 @@ def test_supervisor_source_has_bounded_privilege_and_process_monitor_contract() 
         "_require_root_owned_read_only", "_require_tracer_running",
         "_capture_direct_tracee", "_stop_traced_runtime", '"shutdown_traced"',
         "_apply_runtime_process_limits", '"process_limits"',
+        "socket.if_nameindex()",
     ):
         assert required in source
+    assert 'Path("/sys/class/net")' not in source
