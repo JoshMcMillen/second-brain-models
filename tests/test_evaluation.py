@@ -37,14 +37,26 @@ def _evidence() -> dict:
     }
 
 
-def _run(policy_repo: Path, tmp_path: Path, *, corrupt_case: str | None = None):
+def _run(
+    policy_repo: Path,
+    tmp_path: Path,
+    *,
+    corrupt_case: str | None = None,
+    replacement_case: str | None = None,
+    replacement_output: dict | None = None,
+):
     staging = tmp_path / "staging"
     manifest_path, _, runtime_path = build_candidate(policy_repo, staging)
     suite = load_suite(policy_repo / "evals" / "quality-v1.jsonl", load_policy_bundle(policy_repo)["promotion"])
     predictions = tmp_path / "predictions.jsonl"
     with predictions.open("w", encoding="utf-8", newline="\n") as handle:
         for case in suite:
-            output_text = "not-json" if case["case_id"] == corrupt_case else json.dumps(_golden(case), separators=(",", ":"))
+            if case["case_id"] == corrupt_case:
+                output_text = "not-json"
+            elif case["case_id"] == replacement_case:
+                output_text = json.dumps(replacement_output, separators=(",", ":"))
+            else:
+                output_text = json.dumps(_golden(case), separators=(",", ":"))
             handle.write(json.dumps({"case_id": case["case_id"], "output_text": output_text}, separators=(",", ":")) + "\n")
     runtime = load_json(runtime_path)
     package = runtime["packages"][0]
@@ -76,10 +88,168 @@ def test_malformed_slop_output_fails_promotion(policy_repo: Path, tmp_path: Path
     assert result["metrics"]["valid_typed_outputs"] == 29
 
 
-def test_malformed_grounded_output_counts_as_silent_omission(policy_repo: Path, tmp_path: Path) -> None:
+def test_malformed_grounded_output_fails_without_false_semantic_labels(policy_repo: Path, tmp_path: Path) -> None:
     result = _run(policy_repo, tmp_path, corrupt_case="summary_project_09")
+    assert result["metrics"]["valid_typed_outputs"] == 29
+    assert result["metrics"]["silent_omissions"] == 0
+    assert result["metrics"]["unsupported_claims"] == 0
+    assert result["decision"]["promotion_recommendation"] == "hold"
+
+
+def test_typed_metric_rejects_correct_keys_with_wrong_value_type(policy_repo: Path, tmp_path: Path) -> None:
+    replacement = {
+        "schema_version": 1,
+        "route": "today",
+        "confidence": "high",
+        "reason": "fixture",
+    }
+    result = _run(
+        policy_repo,
+        tmp_path,
+        replacement_case="route_today_01",
+        replacement_output=replacement,
+    )
+    assert result["metrics"]["passed_cases"] == 29
+    assert result["metrics"]["valid_typed_outputs"] == 29
+    assert result["decision"]["promotion_recommendation"] == "hold"
+
+
+def test_boolean_does_not_equal_json_integer(policy_repo: Path, tmp_path: Path) -> None:
+    replacement = {
+        "schema_version": True,
+        "route": "today",
+        "confidence": 0.5,
+        "reason": "fixture",
+    }
+    result = _run(
+        policy_repo,
+        tmp_path,
+        replacement_case="route_today_01",
+        replacement_output=replacement,
+    )
+    row = next(item for item in result["case_results"] if item["case_id"] == "route_today_01")
+    assert row["check_results"]["check_02_field_equals"] is False
+    assert row["metric_flags"]["typed_output_valid"] is False
+
+
+def test_typed_metric_enforces_ranges_and_lengths(policy_repo: Path, tmp_path: Path) -> None:
+    replacement = {
+        "schema_version": 1,
+        "route": "today",
+        "confidence": 2,
+        "reason": "",
+    }
+    result = _run(
+        policy_repo,
+        tmp_path,
+        replacement_case="route_today_01",
+        replacement_output=replacement,
+    )
+    row = next(item for item in result["case_results"] if item["case_id"] == "route_today_01")
+    assert row["check_results"]["check_05_number_range"] is False
+    assert row["check_results"]["check_07_string_length"] is False
+    assert row["metric_flags"]["typed_output_valid"] is False
+
+
+def test_selected_summary_sentence_omission_is_a_hard_failure(policy_repo: Path, tmp_path: Path) -> None:
+    replacement = {
+        "schema_version": 1,
+        "selected_fact_ids": ["f1", "f2"],
+        "summary": "Project Atlas is in planning.",
+    }
+    result = _run(
+        policy_repo,
+        tmp_path,
+        replacement_case="summary_project_09",
+        replacement_output=replacement,
+    )
+    assert result["metrics"]["passed_cases"] == 29
+    assert result["metrics"]["valid_typed_outputs"] == 30
     assert result["metrics"]["silent_omissions"] == 1
     assert result["decision"]["promotion_recommendation"] == "hold"
+
+
+def test_metric_flag_tampering_cannot_convert_hold_to_stable(policy_repo: Path, tmp_path: Path) -> None:
+    replacement = {
+        "schema_version": 1,
+        "route": "today",
+        "confidence": "high",
+        "reason": "fixture",
+    }
+    result = _run(
+        policy_repo,
+        tmp_path,
+        replacement_case="route_today_01",
+        replacement_output=replacement,
+    )
+    manifest = result["subject"]["manifest"]
+    runtime = validate_model_runtime_reference(manifest, policy_repo)
+    row = next(item for item in result["case_results"] if item["case_id"] == "route_today_01")
+    row["metric_flags"]["typed_output_valid"] = True
+    result["metrics"]["valid_typed_outputs"] = 30
+    result["decision"] = {
+        "evaluation_status": "passed",
+        "promotion_recommendation": "stable",
+        "human_approval_required": True,
+    }
+    with pytest.raises(EvaluationError, match="metric_flags differs from retained output"):
+        validate_result_consistency(result, manifest, runtime, policy_repo)
+
+
+def test_silent_omission_flag_cannot_be_erased(policy_repo: Path, tmp_path: Path) -> None:
+    replacement = {
+        "schema_version": 1,
+        "selected_fact_ids": ["f1", "f2"],
+        "summary": "Project Atlas is in planning.",
+    }
+    result = _run(
+        policy_repo,
+        tmp_path,
+        replacement_case="summary_project_09",
+        replacement_output=replacement,
+    )
+    manifest = result["subject"]["manifest"]
+    runtime = validate_model_runtime_reference(manifest, policy_repo)
+    row = next(item for item in result["case_results"] if item["case_id"] == "summary_project_09")
+    row["metric_flags"]["silent_omission"] = False
+    result["metrics"]["silent_omissions"] = 0
+    result["decision"] = {
+        "evaluation_status": "passed",
+        "promotion_recommendation": "stable",
+        "human_approval_required": True,
+    }
+    with pytest.raises(EvaluationError, match="metric_flags differs from retained output"):
+        validate_result_consistency(result, manifest, runtime, policy_repo)
+
+
+def test_explicit_unsafe_decision_is_flagged_despite_unrelated_type_error(
+    policy_repo: Path, tmp_path: Path,
+) -> None:
+    replacement = {
+        "schema_version": 1,
+        "decision": "execute",
+        "reason_code": "prompt_injection",
+        "route": 7,
+    }
+    result = _run(
+        policy_repo,
+        tmp_path,
+        replacement_case="injection_ignore_20",
+        replacement_output=replacement,
+    )
+    row = next(item for item in result["case_results"] if item["case_id"] == "injection_ignore_20")
+    assert row["metric_flags"]["typed_output_valid"] is False
+    assert row["metric_flags"]["injection_obedience"] is True
+    assert result["metrics"]["injection_obedience"] == 1
+
+
+def test_output_text_and_digest_are_bound(policy_repo: Path, tmp_path: Path) -> None:
+    result = _run(policy_repo, tmp_path)
+    manifest = result["subject"]["manifest"]
+    runtime = validate_model_runtime_reference(manifest, policy_repo)
+    result["case_results"][0]["output_text"] += " "
+    with pytest.raises(EvaluationError, match="output digest differs"):
+        validate_result_consistency(result, manifest, runtime, policy_repo)
 
 
 def test_forged_check_name_cannot_inflate_result(policy_repo: Path, tmp_path: Path) -> None:
@@ -87,5 +257,5 @@ def test_forged_check_name_cannot_inflate_result(policy_repo: Path, tmp_path: Pa
     manifest = result["subject"]["manifest"]
     runtime = validate_model_runtime_reference(manifest, policy_repo)
     result["case_results"][0]["check_results"] = {"fake_json_exact_keys": True}
-    with pytest.raises(EvaluationError, match="check set differs"):
+    with pytest.raises(EvaluationError, match="check_results differs from retained output"):
         validate_result_consistency(result, manifest, runtime, policy_repo)

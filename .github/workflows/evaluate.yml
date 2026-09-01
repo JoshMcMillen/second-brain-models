@@ -108,7 +108,7 @@ jobs:
       - name: Install pinned evaluator and namespace tools
         run: |
           set -euo pipefail
-          mkdir -p "$RUNNER_TEMP/receipts"
+          mkdir -p "$RUNNER_TEMP/receipts" "$RUNNER_TEMP/results"
           python -m pip install .
           sudo apt-get update
           sudo apt-get install --yes --no-install-recommends strace
@@ -307,9 +307,9 @@ jobs:
             --repo-root "$GITHUB_WORKSPACE" \
             --manifest "${{ steps.exact.outputs.manifest_path }}" \
             --predictions "$RUNNER_TEMP/evidence/runtime/predictions.jsonl" \
-            --output "$RUNNER_TEMP/evidence/result.json" \
+            --output "$RUNNER_TEMP/results/result.json" \
             --runner-id github-actions-isolated \
-            --runner-version 0.1.0 \
+            --runner-version 0.2.0 \
             --runtime-version "${{ steps.exact.outputs.runtime_version }}" \
             --runtime-platform "$EVALUATOR_PLATFORM" \
             --runtime-package-sha256 "${{ steps.exact.outputs.runtime_package_sha256 }}" \
@@ -330,6 +330,6 @@ jobs:
             ${{ runner.temp }}/evidence/supervisor
             ${{ runner.temp }}/evidence/runtime/predictions.jsonl
             ${{ runner.temp }}/evidence/runtime/probe.json
-            ${{ runner.temp }}/evidence/result.json
+            ${{ runner.temp }}/results/result.json
           if-no-files-found: error
           retention-days: 30
