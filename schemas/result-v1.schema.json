@@ -566,16 +566,69 @@
         "eligible_task_contracts": {
           "description": "Task contracts that meet the selected tier and channel thresholds. Human approval may grant only a subset.",
           "type": "array",
-          "maxItems": 4,
+          "maxItems": 2,
           "uniqueItems": true,
           "items": {
-            "$ref": "#/$defs/taskContractId"
+            "type": "string",
+            "enum": [
+              "intent_routing-v1",
+              "grounded_summary-v1"
+            ]
           }
         },
         "human_approval_required": {
           "const": true
         }
-      }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "promotion_recommendation": {
+                "const": "hold"
+              }
+            },
+            "required": [
+              "promotion_recommendation"
+            ]
+          },
+          "then": {
+            "properties": {
+              "evaluation_status": {
+                "const": "failed"
+              },
+              "eligible_task_contracts": {
+                "maxItems": 0
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "promotion_recommendation": {
+                "enum": [
+                  "beta",
+                  "stable"
+                ]
+              }
+            },
+            "required": [
+              "promotion_recommendation"
+            ]
+          },
+          "then": {
+            "properties": {
+              "evaluation_status": {
+                "const": "passed"
+              },
+              "eligible_task_contracts": {
+                "minItems": 1
+              }
+            }
+          }
+        }
+      ]
     }
   }
 }

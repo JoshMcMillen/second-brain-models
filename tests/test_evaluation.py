@@ -344,6 +344,39 @@ def test_result_schema_rejects_embedded_manifest_with_wrong_resource_tier(
         validate_value(result, "result", policy_repo)
 
 
+@pytest.mark.parametrize(("recommendation", "status", "tasks"), [
+    ("hold", "passed", []),
+    ("hold", "failed", ["intent_routing-v1"]),
+    ("beta", "failed", ["intent_routing-v1"]),
+    ("stable", "passed", []),
+])
+def test_result_schema_rejects_inconsistent_promotion_decisions(
+    policy_repo: Path,
+    tmp_path: Path,
+    recommendation: str,
+    status: str,
+    tasks: list[str],
+) -> None:
+    result = _run(policy_repo, tmp_path)
+    result["decision"].update({
+        "promotion_recommendation": recommendation,
+        "evaluation_status": status,
+        "eligible_task_contracts": tasks,
+    })
+    with pytest.raises(DocumentError, match="result schema validation"):
+        validate_value(result, "result", policy_repo)
+
+
+@pytest.mark.parametrize("task_contract", ["grounded_answer-v1", "safety_boundary-v1"])
+def test_result_schema_rejects_non_functional_eligible_task_contracts(
+    policy_repo: Path, tmp_path: Path, task_contract: str,
+) -> None:
+    result = _run(policy_repo, tmp_path)
+    result["decision"]["eligible_task_contracts"] = [task_contract]
+    with pytest.raises(DocumentError, match="result schema validation"):
+        validate_value(result, "result", policy_repo)
+
+
 def test_output_text_and_digest_are_bound(policy_repo: Path, tmp_path: Path) -> None:
     result = _run(policy_repo, tmp_path)
     manifest = result["subject"]["manifest"]
