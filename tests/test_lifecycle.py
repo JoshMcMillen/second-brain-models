@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from conftest import build_candidate
-from second_brain_models.errors import PolicyError
+from second_brain_models.errors import DocumentError, PolicyError
 from second_brain_models.jsonio import load_json, write_canonical
 from second_brain_models.lifecycle import build_catalog
 
@@ -38,12 +38,30 @@ def test_stable_promotion_requires_installable_beta_history(policy_repo: Path, t
     manifest = load_json(manifest_path)
     manifest["promotion"] = {
         "policy_id": "promotion-v1", "channel": "stable", "status": "approved",
-        "human_review_required": True, "approved_task_contracts": [],
+        "human_review_required": True, "approved_task_contracts": ["intent_routing-v1"],
         "review_reference": "owner-stable-review-1",
     }
     write_canonical(manifest_path, manifest)
     with pytest.raises(PolicyError, match="catalog/beta.json"):
         build_catalog(
             repo_root=policy_repo, output_path=tmp_path / "stable.json", channel="stable",
+            catalog_version=1, key_id="sha256:" + "a" * 64,
+        )
+
+
+def test_installable_promotion_requires_an_approved_task_contract(
+    policy_repo: Path, tmp_path: Path,
+) -> None:
+    manifest_path, _, _ = build_candidate(policy_repo, tmp_path / "external-staging")
+    manifest = load_json(manifest_path)
+    manifest["promotion"] = {
+        "policy_id": "promotion-v1", "channel": "beta", "status": "approved",
+        "human_review_required": True, "approved_task_contracts": [],
+        "review_reference": "owner-beta-review-1",
+    }
+    write_canonical(manifest_path, manifest)
+    with pytest.raises(DocumentError, match="manifest schema validation"):
+        build_catalog(
+            repo_root=policy_repo, output_path=tmp_path / "beta.json", channel="beta",
             catalog_version=1, key_id="sha256:" + "a" * 64,
         )

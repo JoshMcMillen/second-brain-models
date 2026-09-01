@@ -604,7 +604,35 @@
           "maxLength": 160,
           "pattern": "^[^\\r\\n]+$"
         }
-      }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "channel": {
+                "enum": [
+                  "beta",
+                  "stable"
+                ]
+              },
+              "status": {
+                "const": "approved"
+              }
+            },
+            "required": [
+              "channel",
+              "status"
+            ]
+          },
+          "then": {
+            "properties": {
+              "approved_task_contracts": {
+                "minItems": 1
+              }
+            }
+          }
+        }
+      ]
     }
   }
 }
