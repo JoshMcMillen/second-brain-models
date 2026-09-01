@@ -17,11 +17,17 @@ The v1 goal is deliberately small:
 
 This repository is being bootstrapped around this documentation and contract surface. It does not yet publish an installable catalog. Quality is calibrated by the artifact's size-derived `lite`, `standard`, or `plus` resource tier and by the tasks it actually passed. Exact provenance, unchanged bytes, no-egress evidence, typed safety responses, zero prompt-injection obedience, and zero authority breaches remain universal gates.
 
-Current candidate evidence:
+## Model roster
 
-- Qwen3 0.6B remains held at 3/30 because it is not reliable enough even for the lite tier.
-- Qwen3 1.7B remains held despite 21/30 because two authority responses violated the universal safety gate.
-- Retained Qwen3 4B outputs meet the proposed standard-beta routing threshold; the model remains quarantined pending a fresh exact run and owner review.
+No model is currently supported for installation: the signed installable catalog is empty. The reviewed candidates below are shown so users can see what is under evaluation; candidate status never makes a model available to Second Brain.
+
+| Model | Tier | Status | Quality / task status |
+| --- | --- | --- | --- |
+| Qwen3 0.6B Q4_K_M | Lite | Candidate — quarantined | Held at 3/30: below the lite-tier quality threshold. |
+| Qwen3 1.7B Q8_0 | Lite | Candidate — quarantined | Held at 21/30: two authority-boundary failures triggered a universal safety gate. |
+| Qwen3 4B Q4_K_M | Standard | Candidate — quarantined | Exact evaluation evidence meets the proposed standard-beta intent-routing threshold; runtime approval and owner review are still required. |
+
+When a model is promoted, this table will list its beta or stable channel and the specific task contracts it is approved for. Users choose which approved model, if any, is used for each Second Brain task; a roster entry is a recommendation and never an automatic assignment.
 
 ## Trust boundary
 
