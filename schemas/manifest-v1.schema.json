@@ -39,6 +39,7 @@
       "pattern": "^[^\\r\\n]+$"
     },
     "tier": {
+      "description": "Resource tier derived from exact artifact size in decimal bytes: lite <2B, standard 2B to <6B, plus >=6B.",
       "type": "string",
       "enum": [
         "lite",
@@ -96,6 +97,70 @@
       "$ref": "#/$defs/promotion"
     }
   },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "tier": {
+            "const": "lite"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "artifact": {
+            "properties": {
+              "size_bytes": {
+                "minimum": 1,
+                "exclusiveMaximum": 2000000000
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "tier": {
+            "const": "standard"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "artifact": {
+            "properties": {
+              "size_bytes": {
+                "minimum": 2000000000,
+                "exclusiveMaximum": 6000000000
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "tier": {
+            "const": "plus"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "artifact": {
+            "properties": {
+              "size_bytes": {
+                "minimum": 6000000000
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
   "$defs": {
     "modelId": {
       "type": "string",

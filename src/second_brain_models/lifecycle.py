@@ -136,6 +136,10 @@ def build_catalog(
         recommendation = result["decision"]["promotion_recommendation"]
         if channel != "revoked" and (recommendation == "hold" or (channel == "stable" and recommendation != "stable")):
             raise PolicyError(f"result does not qualify for {channel}: {result_path}")
+        if channel != "revoked" and not set(promotion["approved_task_contracts"]) <= set(
+            result["decision"]["eligible_task_contracts"]
+        ):
+            raise PolicyError(f"manifest grants a task contract that did not meet its tier threshold: {manifest_path}")
         entries.append({
             "manifest_path": manifest_path.relative_to(root).as_posix(),
             "manifest_sha256": manifest_digest,

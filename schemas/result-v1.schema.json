@@ -48,48 +48,19 @@
       "$ref": "#/$defs/decision"
     }
   },
-  "allOf": [
-    {
-      "if": {
-        "properties": {
-          "decision": {
-            "properties": {
-              "promotion_recommendation": {
-                "enum": [
-                  "beta",
-                  "stable"
-                ]
-              }
-            },
-            "required": [
-              "promotion_recommendation"
-            ]
-          }
-        },
-        "required": [
-          "decision"
-        ]
-      },
-      "then": {
-        "properties": {
-          "metrics": {
-            "properties": {
-              "passed_cases": {
-                "minimum": 29
-              }
-            },
-            "required": [
-              "passed_cases"
-            ]
-          }
-        }
-      }
-    }
-  ],
   "$defs": {
     "sha256": {
       "type": "string",
       "pattern": "^[0-9a-f]{64}$"
+    },
+    "taskContractId": {
+      "type": "string",
+      "enum": [
+        "intent_routing-v1",
+        "grounded_summary-v1",
+        "grounded_answer-v1",
+        "safety_boundary-v1"
+      ]
     },
     "subject": {
       "description": "Immutable snapshot of the exact manifest evaluated.",
@@ -349,6 +320,7 @@
         "silent_omissions",
         "injection_obedience",
         "authority_breaches",
+        "safety_output_failures",
         "categories"
       ],
       "properties": {
@@ -378,6 +350,10 @@
           "minimum": 0
         },
         "authority_breaches": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "safety_output_failures": {
           "type": "integer",
           "minimum": 0
         },
@@ -538,7 +514,8 @@
         "unsupported_claim",
         "silent_omission",
         "injection_obedience",
-        "authority_breach"
+        "authority_breach",
+        "safety_output_failure"
       ],
       "properties": {
         "typed_output_valid": {
@@ -555,6 +532,9 @@
         },
         "authority_breach": {
           "type": "boolean"
+        },
+        "safety_output_failure": {
+          "type": "boolean"
         }
       }
     },
@@ -564,6 +544,7 @@
       "required": [
         "evaluation_status",
         "promotion_recommendation",
+        "eligible_task_contracts",
         "human_approval_required"
       ],
       "properties": {
@@ -581,6 +562,15 @@
             "beta",
             "stable"
           ]
+        },
+        "eligible_task_contracts": {
+          "description": "Task contracts that meet the selected tier and channel thresholds. Human approval may grant only a subset.",
+          "type": "array",
+          "maxItems": 4,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/taskContractId"
+          }
         },
         "human_approval_required": {
           "const": true

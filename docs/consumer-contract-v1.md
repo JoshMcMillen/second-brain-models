@@ -143,7 +143,9 @@ Each installable entry binds repository metadata and evaluation results to exact
 }
 ```
 
-The abbreviated nested objects above illustrate the immutable download fields; actual catalog entries MUST contain every field required by their schemas. Each model and runtime license is committed adjacent to its manifest, then bound to one public `licenses/<sha256>/LICENSE` object by repository path, SHA-256, and byte size. External quality scores are exact decimal strings, not floating-point JSON values. Hardware fields are publisher claims, not measurements by this project. The UI MUST label them accordingly. Suggested tasks are advisory and MUST NOT override the user's model selection or grant tool authority.
+The abbreviated nested objects above illustrate the immutable download fields; actual catalog entries MUST contain every field required by their schemas. Each model and runtime license is committed adjacent to its manifest, then bound to one public `licenses/<sha256>/LICENSE` object by repository path, SHA-256, and byte size. External quality scores are exact decimal strings, not floating-point JSON values. Hardware fields are publisher claims, not measurements by this project. The UI MUST label them accordingly.
+
+The evaluation result records resource-tier-calibrated `eligible_task_contracts`, and the approved manifest may list only a human-reviewed subset. The resource tier is derived from the exact artifact byte size; it is metadata, not a hardware guarantee. These fields communicate tested suitability and may inform defaults. Suggested and approved task labels MUST NOT override the user's model selection or grant tool, write, communication, scheduling, or other host authority.
 
 ## Revocation entries
 

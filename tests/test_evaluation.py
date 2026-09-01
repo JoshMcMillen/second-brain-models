@@ -4,12 +4,18 @@ import json
 from pathlib import Path
 
 from conftest import build_candidate
-from second_brain_models.evaluation import evaluate_predictions, load_suite, validate_result_consistency
-from second_brain_models.errors import EvaluationError
+from second_brain_models.evaluation import (
+    _quality_decision,
+    evaluate_predictions,
+    load_suite,
+    validate_result_consistency,
+)
+from second_brain_models.errors import DocumentError, EvaluationError
 from second_brain_models.runtime import validate_model_runtime_reference
 import pytest
 from second_brain_models.jsonio import load_json
 from second_brain_models.policy import load_policy_bundle
+from second_brain_models.schema import validate_value
 
 
 def _golden(case: dict) -> dict:
@@ -75,16 +81,18 @@ def test_exact_synthetic_outputs_reach_stable_gate_and_bind_runtime(policy_repo:
     result = _run(policy_repo, tmp_path)
     assert result["metrics"]["passed_cases"] == 30
     assert result["decision"]["promotion_recommendation"] == "stable"
+    assert result["decision"]["eligible_task_contracts"] == [
+        "grounded_summary-v1", "intent_routing-v1",
+    ]
     assert result["execution"]["runtime_package_sha256"]
     assert result["execution"]["isolation"]["network_attempts_observed"] == 0
     assert "started_at" not in result["execution"]
 
 
-def test_malformed_slop_output_fails_promotion(policy_repo: Path, tmp_path: Path) -> None:
+def test_malformed_output_removes_only_the_affected_task(policy_repo: Path, tmp_path: Path) -> None:
     result = _run(policy_repo, tmp_path, corrupt_case="route_today_01")
-    assert result["decision"] == {
-        "evaluation_status": "failed", "promotion_recommendation": "hold", "human_approval_required": True,
-    }
+    assert result["decision"]["promotion_recommendation"] == "stable"
+    assert result["decision"]["eligible_task_contracts"] == ["grounded_summary-v1"]
     assert result["metrics"]["valid_typed_outputs"] == 29
 
 
@@ -93,7 +101,8 @@ def test_malformed_grounded_output_fails_without_false_semantic_labels(policy_re
     assert result["metrics"]["valid_typed_outputs"] == 29
     assert result["metrics"]["silent_omissions"] == 0
     assert result["metrics"]["unsupported_claims"] == 0
-    assert result["decision"]["promotion_recommendation"] == "hold"
+    assert result["decision"]["promotion_recommendation"] == "stable"
+    assert result["decision"]["eligible_task_contracts"] == ["intent_routing-v1"]
 
 
 def test_typed_metric_rejects_correct_keys_with_wrong_value_type(policy_repo: Path, tmp_path: Path) -> None:
@@ -111,7 +120,8 @@ def test_typed_metric_rejects_correct_keys_with_wrong_value_type(policy_repo: Pa
     )
     assert result["metrics"]["passed_cases"] == 29
     assert result["metrics"]["valid_typed_outputs"] == 29
-    assert result["decision"]["promotion_recommendation"] == "hold"
+    assert result["decision"]["promotion_recommendation"] == "stable"
+    assert result["decision"]["eligible_task_contracts"] == ["grounded_summary-v1"]
 
 
 def test_boolean_does_not_equal_json_integer(policy_repo: Path, tmp_path: Path) -> None:
@@ -166,7 +176,20 @@ def test_selected_summary_sentence_omission_is_a_hard_failure(policy_repo: Path,
     assert result["metrics"]["passed_cases"] == 29
     assert result["metrics"]["valid_typed_outputs"] == 30
     assert result["metrics"]["silent_omissions"] == 1
-    assert result["decision"]["promotion_recommendation"] == "hold"
+    assert result["decision"]["promotion_recommendation"] == "stable"
+    assert result["decision"]["eligible_task_contracts"] == ["intent_routing-v1"]
+
+
+def test_malformed_safety_output_fails_closed(policy_repo: Path, tmp_path: Path) -> None:
+    result = _run(policy_repo, tmp_path, corrupt_case="injection_ignore_20")
+    assert result["metrics"]["injection_obedience"] == 0
+    assert result["metrics"]["safety_output_failures"] == 1
+    assert result["decision"] == {
+        "evaluation_status": "failed",
+        "promotion_recommendation": "hold",
+        "eligible_task_contracts": [],
+        "human_approval_required": True,
+    }
 
 
 def test_metric_flag_tampering_cannot_convert_hold_to_stable(policy_repo: Path, tmp_path: Path) -> None:
@@ -241,6 +264,84 @@ def test_explicit_unsafe_decision_is_flagged_despite_unrelated_type_error(
     assert row["metric_flags"]["typed_output_valid"] is False
     assert row["metric_flags"]["injection_obedience"] is True
     assert result["metrics"]["injection_obedience"] == 1
+    assert result["decision"]["promotion_recommendation"] == "hold"
+    assert result["decision"]["eligible_task_contracts"] == []
+
+
+def test_standard_beta_boundary_allows_routing_only_profile(policy_repo: Path) -> None:
+    promotion = load_policy_bundle(policy_repo)["promotion"]
+    suite = load_suite(policy_repo / "evals" / "quality-v1.jsonl", promotion)
+    rows = []
+    category_seen: dict[str, int] = {}
+    passing_by_category = {
+        "instruction_typed_output": 8,
+        "grounded_summarization": 4,
+        "abstention": 3,
+        "prompt_injection": 0,
+        "authority_refusal": 6,
+    }
+    for case in suite:
+        category = case["category"]
+        index = category_seen.get(category, 0)
+        category_seen[category] = index + 1
+        flags = {
+            "typed_output_valid": not (category == "abstention" and index >= 3),
+            "unsupported_claim": category == "grounded_summarization" and index == 4,
+            "silent_omission": category == "grounded_summarization" and index == 5,
+            "injection_obedience": False,
+            "authority_breach": False,
+            "safety_output_failure": False,
+        }
+        rows.append({
+            "case_id": case["case_id"],
+            "passed": index < passing_by_category[category],
+            "metric_flags": flags,
+        })
+    metrics = {
+        "passed_cases": 21,
+        "valid_typed_outputs": 28,
+        "injection_obedience": 0,
+        "authority_breaches": 0,
+        "safety_output_failures": 0,
+    }
+    assert _quality_decision(metrics, rows, suite, "standard", promotion["evaluation"]) == (
+        "beta", ["intent_routing-v1"],
+    )
+
+
+@pytest.mark.parametrize("tier", ["lite", "standard", "plus"])
+def test_universal_safety_gates_precede_every_tier_quality(policy_repo: Path, tier: str) -> None:
+    promotion = load_policy_bundle(policy_repo)["promotion"]
+    suite = load_suite(policy_repo / "evals" / "quality-v1.jsonl", promotion)
+    rows = [{
+        "case_id": case["case_id"],
+        "passed": True,
+        "metric_flags": {
+            "typed_output_valid": True,
+            "unsupported_claim": False,
+            "silent_omission": False,
+            "injection_obedience": False,
+            "authority_breach": case["case_id"] == "authority_approve_25",
+            "safety_output_failure": case["case_id"] == "authority_approve_25",
+        },
+    } for case in suite]
+    metrics = {
+        "passed_cases": 30,
+        "valid_typed_outputs": 30,
+        "injection_obedience": 0,
+        "authority_breaches": 1,
+        "safety_output_failures": 1,
+    }
+    assert _quality_decision(metrics, rows, suite, tier, promotion["evaluation"]) == ("hold", [])
+
+
+def test_result_schema_rejects_embedded_manifest_with_wrong_resource_tier(
+    policy_repo: Path, tmp_path: Path,
+) -> None:
+    result = _run(policy_repo, tmp_path)
+    result["subject"]["manifest"]["tier"] = "standard"
+    with pytest.raises(DocumentError, match="result schema validation"):
+        validate_value(result, "result", policy_repo)
 
 
 def test_output_text_and_digest_are_bound(policy_repo: Path, tmp_path: Path) -> None:
@@ -258,4 +359,15 @@ def test_forged_check_name_cannot_inflate_result(policy_repo: Path, tmp_path: Pa
     runtime = validate_model_runtime_reference(manifest, policy_repo)
     result["case_results"][0]["check_results"] = {"fake_json_exact_keys": True}
     with pytest.raises(EvaluationError, match="check_results differs from retained output"):
+        validate_result_consistency(result, manifest, runtime, policy_repo)
+
+
+def test_eligible_task_contracts_are_recomputed_from_retained_outputs(
+    policy_repo: Path, tmp_path: Path,
+) -> None:
+    result = _run(policy_repo, tmp_path)
+    manifest = result["subject"]["manifest"]
+    runtime = validate_model_runtime_reference(manifest, policy_repo)
+    result["decision"]["eligible_task_contracts"].append("grounded_answer-v1")
+    with pytest.raises(EvaluationError, match="deterministic policy thresholds"):
         validate_result_consistency(result, manifest, runtime, policy_repo)
