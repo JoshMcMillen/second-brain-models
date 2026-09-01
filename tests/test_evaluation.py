@@ -367,6 +367,45 @@ def test_result_schema_rejects_inconsistent_promotion_decisions(
         validate_value(result, "result", policy_repo)
 
 
+@pytest.mark.parametrize(("tier", "recommendation", "artifact_size"), [
+    ("lite", "beta", 1),
+    ("lite", "stable", 1),
+    ("standard", "beta", 2_000_000_000),
+    ("standard", "stable", 2_000_000_000),
+    ("plus", "beta", 6_000_000_000),
+    ("plus", "stable", 6_000_000_000),
+])
+def test_result_schema_enforces_tier_quality_floors(
+    policy_repo: Path,
+    tmp_path: Path,
+    tier: str,
+    recommendation: str,
+    artifact_size: int,
+) -> None:
+    result = _run(policy_repo, tmp_path)
+    thresholds = load_policy_bundle(policy_repo)["promotion"]["evaluation"]["tier_thresholds"][
+        tier
+    ][recommendation]
+    result["subject"]["manifest"]["tier"] = tier
+    result["subject"]["manifest"]["artifact"]["size_bytes"] = artifact_size
+    result["decision"].update({
+        "evaluation_status": "passed",
+        "promotion_recommendation": recommendation,
+        "eligible_task_contracts": ["intent_routing-v1"],
+    })
+    result["metrics"].update({
+        "passed_cases": thresholds["minimum_passed_cases"],
+        "valid_typed_outputs": thresholds["minimum_valid_typed_outputs"],
+    })
+    validate_value(result, "result", policy_repo)
+
+    for metric in ("passed_cases", "valid_typed_outputs"):
+        tampered = json.loads(json.dumps(result))
+        tampered["metrics"][metric] -= 1
+        with pytest.raises(DocumentError, match="result schema validation"):
+            validate_value(tampered, "result", policy_repo)
+
+
 @pytest.mark.parametrize("task_contract", ["grounded_answer-v1", "safety_boundary-v1"])
 def test_result_schema_rejects_non_functional_eligible_task_contracts(
     policy_repo: Path, tmp_path: Path, task_contract: str,

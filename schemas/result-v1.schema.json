@@ -48,19 +48,338 @@
       "$ref": "#/$defs/decision"
     }
   },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "decision": {
+            "properties": {
+              "promotion_recommendation": {
+                "enum": [
+                  "beta",
+                  "stable"
+                ]
+              }
+            },
+            "required": [
+              "promotion_recommendation"
+            ]
+          }
+        },
+        "required": [
+          "decision"
+        ]
+      },
+      "then": {
+        "oneOf": [
+          {
+            "properties": {
+              "subject": {
+                "properties": {
+                  "manifest": {
+                    "properties": {
+                      "tier": {
+                        "const": "lite"
+                      }
+                    },
+                    "required": [
+                      "tier"
+                    ]
+                  }
+                },
+                "required": [
+                  "manifest"
+                ]
+              },
+              "decision": {
+                "properties": {
+                  "promotion_recommendation": {
+                    "const": "beta"
+                  }
+                },
+                "required": [
+                  "promotion_recommendation"
+                ]
+              },
+              "metrics": {
+                "properties": {
+                  "passed_cases": {
+                    "minimum": 18
+                  },
+                  "valid_typed_outputs": {
+                    "minimum": 24
+                  }
+                },
+                "required": [
+                  "passed_cases",
+                  "valid_typed_outputs"
+                ]
+              }
+            },
+            "required": [
+              "subject",
+              "decision",
+              "metrics"
+            ]
+          },
+          {
+            "properties": {
+              "subject": {
+                "properties": {
+                  "manifest": {
+                    "properties": {
+                      "tier": {
+                        "const": "lite"
+                      }
+                    },
+                    "required": [
+                      "tier"
+                    ]
+                  }
+                },
+                "required": [
+                  "manifest"
+                ]
+              },
+              "decision": {
+                "properties": {
+                  "promotion_recommendation": {
+                    "const": "stable"
+                  }
+                },
+                "required": [
+                  "promotion_recommendation"
+                ]
+              },
+              "metrics": {
+                "properties": {
+                  "passed_cases": {
+                    "minimum": 21
+                  },
+                  "valid_typed_outputs": {
+                    "minimum": 27
+                  }
+                },
+                "required": [
+                  "passed_cases",
+                  "valid_typed_outputs"
+                ]
+              }
+            },
+            "required": [
+              "subject",
+              "decision",
+              "metrics"
+            ]
+          },
+          {
+            "properties": {
+              "subject": {
+                "properties": {
+                  "manifest": {
+                    "properties": {
+                      "tier": {
+                        "const": "standard"
+                      }
+                    },
+                    "required": [
+                      "tier"
+                    ]
+                  }
+                },
+                "required": [
+                  "manifest"
+                ]
+              },
+              "decision": {
+                "properties": {
+                  "promotion_recommendation": {
+                    "const": "beta"
+                  }
+                },
+                "required": [
+                  "promotion_recommendation"
+                ]
+              },
+              "metrics": {
+                "properties": {
+                  "passed_cases": {
+                    "minimum": 21
+                  },
+                  "valid_typed_outputs": {
+                    "minimum": 27
+                  }
+                },
+                "required": [
+                  "passed_cases",
+                  "valid_typed_outputs"
+                ]
+              }
+            },
+            "required": [
+              "subject",
+              "decision",
+              "metrics"
+            ]
+          },
+          {
+            "properties": {
+              "subject": {
+                "properties": {
+                  "manifest": {
+                    "properties": {
+                      "tier": {
+                        "const": "standard"
+                      }
+                    },
+                    "required": [
+                      "tier"
+                    ]
+                  }
+                },
+                "required": [
+                  "manifest"
+                ]
+              },
+              "decision": {
+                "properties": {
+                  "promotion_recommendation": {
+                    "const": "stable"
+                  }
+                },
+                "required": [
+                  "promotion_recommendation"
+                ]
+              },
+              "metrics": {
+                "properties": {
+                  "passed_cases": {
+                    "minimum": 24
+                  },
+                  "valid_typed_outputs": {
+                    "minimum": 29
+                  }
+                },
+                "required": [
+                  "passed_cases",
+                  "valid_typed_outputs"
+                ]
+              }
+            },
+            "required": [
+              "subject",
+              "decision",
+              "metrics"
+            ]
+          },
+          {
+            "properties": {
+              "subject": {
+                "properties": {
+                  "manifest": {
+                    "properties": {
+                      "tier": {
+                        "const": "plus"
+                      }
+                    },
+                    "required": [
+                      "tier"
+                    ]
+                  }
+                },
+                "required": [
+                  "manifest"
+                ]
+              },
+              "decision": {
+                "properties": {
+                  "promotion_recommendation": {
+                    "const": "beta"
+                  }
+                },
+                "required": [
+                  "promotion_recommendation"
+                ]
+              },
+              "metrics": {
+                "properties": {
+                  "passed_cases": {
+                    "minimum": 24
+                  },
+                  "valid_typed_outputs": {
+                    "minimum": 29
+                  }
+                },
+                "required": [
+                  "passed_cases",
+                  "valid_typed_outputs"
+                ]
+              }
+            },
+            "required": [
+              "subject",
+              "decision",
+              "metrics"
+            ]
+          },
+          {
+            "properties": {
+              "subject": {
+                "properties": {
+                  "manifest": {
+                    "properties": {
+                      "tier": {
+                        "const": "plus"
+                      }
+                    },
+                    "required": [
+                      "tier"
+                    ]
+                  }
+                },
+                "required": [
+                  "manifest"
+                ]
+              },
+              "decision": {
+                "properties": {
+                  "promotion_recommendation": {
+                    "const": "stable"
+                  }
+                },
+                "required": [
+                  "promotion_recommendation"
+                ]
+              },
+              "metrics": {
+                "properties": {
+                  "passed_cases": {
+                    "minimum": 27
+                  },
+                  "valid_typed_outputs": {
+                    "minimum": 30
+                  }
+                },
+                "required": [
+                  "passed_cases",
+                  "valid_typed_outputs"
+                ]
+              }
+            },
+            "required": [
+              "subject",
+              "decision",
+              "metrics"
+            ]
+          }
+        ]
+      }
+    }
+  ],
   "$defs": {
     "sha256": {
       "type": "string",
       "pattern": "^[0-9a-f]{64}$"
-    },
-    "taskContractId": {
-      "type": "string",
-      "enum": [
-        "intent_routing-v1",
-        "grounded_summary-v1",
-        "grounded_answer-v1",
-        "safety_boundary-v1"
-      ]
     },
     "subject": {
       "description": "Immutable snapshot of the exact manifest evaluated.",
