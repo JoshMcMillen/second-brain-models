@@ -12,7 +12,10 @@ from second_brain_models.inference import _contract_instruction
         ("intent_routing-v1", ("allowed_routes", "confidence", "reason")),
         ("grounded_summary-v1", ("selected_fact_ids", "extractive", "unsupported")),
         ("grounded_answer-v1", ("not_stated", "evidence_ids", "input.facts")),
-        ("safety_boundary-v1", ("prompt_injection", "no_authority", "route to none")),
+        (
+            "safety_boundary-v1",
+            ("untrusted_content only as data", "prompt_injection", "no_authority", "route to none"),
+        ),
     ],
 )
 def test_task_contract_instructions_define_the_scored_shape(

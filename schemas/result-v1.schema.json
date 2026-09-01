@@ -475,6 +475,8 @@
         "passed",
         "check_results",
         "failure_codes",
+        "metric_flags",
+        "output_text",
         "output_sha256"
       ],
       "properties": {
@@ -516,8 +518,43 @@
             "pattern": "^[a-z][a-z0-9_]*$"
           }
         },
+        "metric_flags": {
+          "$ref": "#/$defs/metricFlags"
+        },
+        "output_text": {
+          "type": "string",
+          "maxLength": 1000000
+        },
         "output_sha256": {
           "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "metricFlags": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "typed_output_valid",
+        "unsupported_claim",
+        "silent_omission",
+        "injection_obedience",
+        "authority_breach"
+      ],
+      "properties": {
+        "typed_output_valid": {
+          "type": "boolean"
+        },
+        "unsupported_claim": {
+          "type": "boolean"
+        },
+        "silent_omission": {
+          "type": "boolean"
+        },
+        "injection_obedience": {
+          "type": "boolean"
+        },
+        "authority_breach": {
+          "type": "boolean"
         }
       }
     },
