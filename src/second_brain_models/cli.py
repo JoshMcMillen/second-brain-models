@@ -16,6 +16,7 @@ from .lifecycle import build_catalog, create_revocation
 from .noegress import collect_no_egress_evidence, merge_no_egress_evidence, probe_no_egress
 from .network_monitor import check_strace_logs
 from .inference import run_loopback_inference
+from .evaluation_stage import stage_evaluation_inputs
 from .repository import check_proposed_contracts, check_repository
 from .schema import validate_file
 from .runtime import validate_runtime_manifest
@@ -100,6 +101,10 @@ def _parser() -> argparse.ArgumentParser:
     monitor = commands.add_parser("network-monitor-check", help="fail on attempted runtime DNS/TCP/UDP and retain trace digest")
     monitor.add_argument("--network-trace", required=True, type=_path, nargs="+")
     monitor.add_argument("--output", required=True, type=_path)
+    monitor.add_argument(
+        "--expected-runtime-executable", type=_path,
+        help="require the trace to show a successful execve of this exact runtime",
+    )
 
     merge = commands.add_parser("merge-isolation-evidence", help="combine live no-egress and completed monitor receipts")
     merge.add_argument("--probe", required=True, type=_path)
@@ -127,6 +132,34 @@ def _parser() -> argparse.ArgumentParser:
     evaluate.add_argument("--inference-started-at", required=True)
     evaluate.add_argument("--inference-finished-at", required=True)
     evaluate.add_argument("--runtime-finished-at", required=True)
+    evaluate.add_argument(
+        "--require-pass", action="store_true",
+        help="write the result, then fail when the deterministic quality decision is hold",
+    )
+
+    stage = commands.add_parser(
+        "evaluation-stage",
+        help="download exact public model/runtime inputs and verify pinned size and SHA-256",
+    )
+    stage.add_argument("--repo-root", type=_path, default=Path.cwd())
+    stage.add_argument("--manifest", required=True, type=_path)
+    stage.add_argument("--platform", required=True, choices=("linux-x86_64",))
+    stage.add_argument("--staging-root", required=True, type=_path)
+    stage.add_argument("--receipt", required=True, type=_path)
+
+    isolated = commands.add_parser(
+        "isolated-supervisor",
+        help="run the exact runtime and synthetic inference inside an unshared Linux namespace",
+    )
+    isolated.add_argument("--repo-root", type=_path, default=Path.cwd())
+    isolated.add_argument("--python-executable", required=True, type=_path)
+    isolated.add_argument("--runtime-executable", required=True, type=_path)
+    isolated.add_argument("--model", required=True, type=_path)
+    isolated.add_argument("--port", required=True, type=int)
+    isolated.add_argument("--isolation-id", required=True)
+    isolated.add_argument("--supervisor-root", required=True, type=_path)
+    isolated.add_argument("--runtime-output-root", required=True, type=_path)
+    isolated.add_argument("--artifact-reader-gid", required=True, type=int)
 
     discovery = commands.add_parser("discover", help="query allowlisted publisher metadata without downloading or executing content")
     discovery.add_argument("--repo-root", type=_path, default=Path.cwd())
@@ -184,7 +217,9 @@ def run(argv: list[str] | None = None) -> int:
         write_canonical(args.output, evidence)
         _print(evidence)
     elif args.command == "network-monitor-check":
-        monitor = check_strace_logs(args.network_trace)
+        monitor = check_strace_logs(
+            args.network_trace, expected_runtime_executable=args.expected_runtime_executable,
+        )
         write_canonical(args.output, monitor)
         _print(monitor)
     elif args.command == "merge-isolation-evidence":
@@ -218,6 +253,31 @@ def run(argv: list[str] | None = None) -> int:
             inference_finished_at=args.inference_finished_at, runtime_finished_at=args.runtime_finished_at,
         )
         _print(result["decision"])
+        if args.require_pass and result["decision"]["evaluation_status"] != "passed":
+            raise ModelCatalogError("deterministic quality gate did not pass; result was retained")
+    elif args.command == "evaluation-stage":
+        receipt = stage_evaluation_inputs(
+            repo_root=args.repo_root, manifest_path=args.manifest, platform=args.platform,
+            staging_root=args.staging_root, receipt_path=args.receipt,
+        )
+        _print({
+            "status": receipt["status"],
+            "model_sha256": receipt["model"]["sha256"],
+            "runtime_sha256": receipt["runtime"]["sha256"],
+        })
+    elif args.command == "isolated-supervisor":
+        # POSIX-only imports stay lazy so all other tooling remains portable.
+        from .isolated_evaluator import run_isolated_evaluation
+
+        receipt = run_isolated_evaluation(
+            repo_root=args.repo_root, python_executable=args.python_executable,
+            runtime_executable=args.runtime_executable, model_path=args.model,
+            port=args.port, isolation_id=args.isolation_id,
+            supervisor_root=args.supervisor_root,
+            runtime_output_root=args.runtime_output_root,
+            artifact_reader_gid=args.artifact_reader_gid,
+        )
+        _print({"status": receipt["status"], "isolation_id": receipt["isolation_id"]})
     elif args.command == "discover":
         _print(discover(args.repo_root, args.output, limit_per_publisher=args.limit_per_publisher))
     elif args.command == "build-catalog":

@@ -18,4 +18,5 @@ Machine-readable environment and branch settings are retained under `.github/set
 
 - No production catalog signing key or GitHub signing secret exists. The signing fixture is test-only.
 - No R2 credentials exist because R2 is not enabled for the Cloudflare account.
-- No workflow can publish, revoke, or qualify a model yet. Those workflows fail closed until their documented same-job evaluation and artifact-first R2 receipts are implemented.
+- Publishing and revocation remain disabled until their artifact-first R2 receipts are implemented.
+- The protected `evaluate.yml` workflow can now qualify one exact candidate without R2 or secrets. It retains the deterministic result and security receipts but cannot commit, publish, or promote anything.

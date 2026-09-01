@@ -8,9 +8,14 @@ on:
       - "runtimes/**"
       - "policy/promotion-v1.yaml"
       - "schemas/result-v1.schema.json"
+      - "src/second_brain_models/cli.py"
       - "src/second_brain_models/evaluation.py"
+      - "src/second_brain_models/evaluation_stage.py"
+      - "src/second_brain_models/inference.py"
+      - "src/second_brain_models/isolated_evaluator.py"
       - "src/second_brain_models/network_monitor.py"
       - "src/second_brain_models/noegress.py"
+      - "src/second_brain_models/runtime_archive.py"
       - "tests/**"
       - ".github/workflows/evaluate.yml"
   workflow_dispatch:
@@ -18,33 +23,16 @@ on:
       manifest_path:
         description: Exact reviewed model manifest on the protected default branch
         required: true
-        type: string
-      predictions_artifact_run_id:
-        description: Trusted isolated-run artifact containing predictions.jsonl and strace logs
-        required: true
-        type: string
-      predictions_artifact_name:
-        description: Exact isolated-run artifact name
-        required: true
-        type: string
-      runtime_version:
-        description: Exact runtime version matching the pinned runtime manifest
-        required: true
-        type: string
-      runtime_port:
-        description: Loopback port of the still-running runtime in the isolated runner
-        required: true
-        default: "8080"
+        default: models/qwen3-0.6b-q4_k_m/manifest.json
         type: string
 
 permissions:
   contents: read
-  actions: read
 
 jobs:
   evaluator-contract:
     if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - name: Check out protected base evaluator
@@ -53,7 +41,7 @@ jobs:
           ref: ${{ github.event.pull_request.base.sha }}
           path: trusted
           persist-credentials: false
-      - name: Check out proposed fixtures/policy as untrusted data
+      - name: Check out proposed fixtures and policy as untrusted data
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           ref: ${{ github.event.pull_request.head.sha }}
@@ -64,7 +52,9 @@ jobs:
           python-version: "3.13"
           cache: pip
       - run: python -m pip install './trusted[test]'
-      - run: |
+      - name: Validate proposal with protected evaluator code
+        run: |
+          set -euo pipefail
           audit_root="$RUNNER_TEMP/protected-contract-audit"
           mkdir -p "$audit_root"
           cp -a trusted/policy trusted/schemas trusted/evals "$audit_root/"
@@ -73,39 +63,213 @@ jobs:
           done
           sb-models repo-check --repo-root "$audit_root"
           sb-models proposed-contract-check --proposal-root untrusted
-          python -m pytest trusted/tests/test_evaluation.py trusted/tests/test_network_monitor.py
+          python -m pytest \
+            trusted/tests/test_evaluation.py \
+            trusted/tests/test_network_monitor.py \
+            trusted/tests/test_workflows.py
 
-  disconnected-evaluation-not-yet-enabled:
-    if: github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
-    environment: model-evaluation
-    env:
-      INPUT_MANIFEST_PATH: ${{ inputs.manifest_path }}
-      INPUT_PREDICTIONS_ARTIFACT_RUN_ID: ${{ inputs.predictions_artifact_run_id }}
-      INPUT_PREDICTIONS_ARTIFACT_NAME: ${{ inputs.predictions_artifact_name }}
-      INPUT_RUNTIME_VERSION: ${{ inputs.runtime_version }}
-      INPUT_RUNTIME_PORT: ${{ inputs.runtime_port }}
+  implementation-tests:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
     steps:
-      - name: Check out protected evaluator and policy
+      - name: Check out proposed implementation without credentials
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          ref: ${{ github.event.repository.default_branch }}
+          ref: ${{ github.event.pull_request.head.sha }}
           persist-credentials: false
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
         with:
           python-version: "3.13"
           cache: pip
-      - run: python -m pip install .
-      - name: Download trusted isolated runtime receipt
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+      - run: python -m pip install '.[test]'
+      - run: python -m pytest
+
+  evaluate-exact-candidate:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    environment: model-evaluation
+    env:
+      INPUT_MANIFEST_PATH: ${{ inputs.manifest_path }}
+      EVALUATOR_PLATFORM: linux-x86_64
+      EVALUATOR_PORT: "8080"
+    steps:
+      - name: Check out protected default-branch evaluator
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          name: ${{ env.INPUT_PREDICTIONS_ARTIFACT_NAME }}
-          path: ${{ runner.temp }}/isolated-run
-          run-id: ${{ env.INPUT_PREDICTIONS_ARTIFACT_RUN_ID }}
-          github-token: ${{ github.token }}
-      - name: Evaluation disabled until this job owns runtime startup and syscall tracing
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: "3.13"
+          cache: pip
+      - name: Install pinned evaluator and namespace tools
         run: |
-          echo "FAIL CLOSED: imported predictions or trace receipts cannot qualify a model." >&2
-          echo "Enable only after this protected job starts the exact pinned runtime in a no-network namespace and monitors DNS/TCP/UDP from startup through inference." >&2
-          exit 1
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/receipts"
+          python -m pip install .
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends strace
+          {
+            git rev-parse HEAD
+            python --version
+            strace --version | head -n 1
+            unshare --version | head -n 1
+            setpriv --version | head -n 1
+            ip -Version
+          } > "$RUNNER_TEMP/receipts/toolchain.txt"
+      - name: Validate and download exact public inputs
+        run: |
+          set -euo pipefail
+          if [[ ! "$INPUT_MANIFEST_PATH" =~ ^models/[a-z0-9][a-z0-9._-]*/manifest\.json$ ]]; then
+            echo "Manifest path is not canonical." >&2
+            exit 2
+          fi
+          sb-models repo-check --repo-root "$GITHUB_WORKSPACE"
+          sb-models evaluation-stage \
+            --repo-root "$GITHUB_WORKSPACE" \
+            --manifest "$GITHUB_WORKSPACE/$INPUT_MANIFEST_PATH" \
+            --platform "$EVALUATOR_PLATFORM" \
+            --staging-root "$RUNNER_TEMP/staging" \
+            --receipt "$RUNNER_TEMP/receipts/download.json"
+      - name: Resolve validated content-addressed paths
+        id: exact
+        run: |
+          set -euo pipefail
+          receipt="$RUNNER_TEMP/receipts/download.json"
+          runtime_manifest=$(jq -er '.runtime.manifest_path // empty' "$GITHUB_WORKSPACE/$INPUT_MANIFEST_PATH")
+          model_relative=$(jq -er '.model.path' "$receipt")
+          runtime_relative=$(jq -er '.runtime.path' "$receipt")
+          executable_relative=$(jq -er '.runtime.executable_path' "$receipt")
+          {
+            printf 'manifest_path=%s\n' "$GITHUB_WORKSPACE/$INPUT_MANIFEST_PATH"
+            printf 'model_path=%s\n' "$RUNNER_TEMP/staging/$model_relative"
+            printf 'runtime_manifest=%s\n' "$GITHUB_WORKSPACE/$runtime_manifest"
+            printf 'runtime_archive=%s\n' "$RUNNER_TEMP/staging/$runtime_relative"
+            printf 'runtime_executable=%s\n' "$RUNNER_TEMP/runtime/$executable_relative"
+            printf 'runtime_version=%s\n' "$(jq -er '.runtime.version' "$receipt")"
+            printf 'runtime_package_sha256=%s\n' "$(jq -er '.runtime.sha256' "$receipt")"
+          } >> "$GITHUB_OUTPUT"
+      - name: Run static checks and guarded extraction
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/runtime"
+          sb-models candidate-check \
+            --repo-root "$GITHUB_WORKSPACE" \
+            --manifest "${{ steps.exact.outputs.manifest_path }}" \
+            --artifact-root "$RUNNER_TEMP/staging" \
+            --report "$RUNNER_TEMP/receipts/candidate-pre.json"
+          sb-models runtime-package-check \
+            --repo-root "$GITHUB_WORKSPACE" \
+            --runtime-manifest "${{ steps.exact.outputs.runtime_manifest }}" \
+            --package-root "$RUNNER_TEMP/staging" \
+            --platform "$EVALUATOR_PLATFORM" \
+            --report "$RUNNER_TEMP/receipts/runtime-pre.json"
+          sb-models runtime-extract \
+            --repo-root "$GITHUB_WORKSPACE" \
+            --runtime-manifest "${{ steps.exact.outputs.runtime_manifest }}" \
+            --package-root "$RUNNER_TEMP/staging" \
+            --platform "$EVALUATOR_PLATFORM" \
+            --destination "$RUNNER_TEMP/runtime" \
+            > "$RUNNER_TEMP/receipts/runtime-extract.json"
+          sudo chown root:root \
+            "${{ steps.exact.outputs.model_path }}" \
+            "${{ steps.exact.outputs.runtime_archive }}" \
+            "${{ steps.exact.outputs.runtime_executable }}"
+          sudo chmod 0444 \
+            "${{ steps.exact.outputs.model_path }}" \
+            "${{ steps.exact.outputs.runtime_archive }}"
+          sudo chmod 0555 "${{ steps.exact.outputs.runtime_executable }}"
+          sha256sum "${{ steps.exact.outputs.runtime_executable }}" \
+            > "$RUNNER_TEMP/receipts/runtime-executable-pre.sha256"
+      - name: Run runtime and synthetic suite in one disconnected namespace
+        run: |
+          set -euo pipefail
+          python_binary=$(command -v python)
+          isolation_id="gha-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          sudo unshare \
+            --mount --net --pid --fork --mount-proc --kill-child=SIGKILL \
+            "$python_binary" -m second_brain_models isolated-supervisor \
+            --repo-root "$GITHUB_WORKSPACE" \
+            --python-executable "$python_binary" \
+            --runtime-executable "${{ steps.exact.outputs.runtime_executable }}" \
+            --model "${{ steps.exact.outputs.model_path }}" \
+            --port "$EVALUATOR_PORT" \
+            --isolation-id "$isolation_id" \
+            --supervisor-root "$RUNNER_TEMP/evidence/supervisor" \
+            --runtime-output-root "$RUNNER_TEMP/evidence/runtime" \
+            --artifact-reader-gid "$(id -g)"
+      - name: Validate process-tree trace and no-egress evidence
+        run: |
+          set -euo pipefail
+          jq -e '.status == "completed" and .shutdown_traced == true and .tracer_exit_code == 0 and .namespace.network == "new" and .namespace.pid == "new" and .namespace.mount == "new"' \
+            "$RUNNER_TEMP/evidence/supervisor/supervisor.json" > /dev/null
+          shopt -s nullglob
+          trace_files=("$RUNNER_TEMP"/evidence/supervisor/strace/runtime.*)
+          if (( ${#trace_files[@]} == 0 )); then
+            echo "No runtime syscall trace was retained." >&2
+            exit 2
+          fi
+          sb-models network-monitor-check \
+            --network-trace "${trace_files[@]}" \
+            --expected-runtime-executable "${{ steps.exact.outputs.runtime_executable }}" \
+            --output "$RUNNER_TEMP/receipts/network-monitor.json"
+          sb-models merge-isolation-evidence \
+            --probe "$RUNNER_TEMP/evidence/runtime/probe.json" \
+            --monitor "$RUNNER_TEMP/receipts/network-monitor.json" \
+            --output "$RUNNER_TEMP/receipts/isolation.json"
+      - name: Revalidate exact bytes after inference
+        run: |
+          set -euo pipefail
+          sb-models candidate-check \
+            --repo-root "$GITHUB_WORKSPACE" \
+            --manifest "${{ steps.exact.outputs.manifest_path }}" \
+            --artifact-root "$RUNNER_TEMP/staging" \
+            --report "$RUNNER_TEMP/receipts/candidate-post.json"
+          sb-models runtime-package-check \
+            --repo-root "$GITHUB_WORKSPACE" \
+            --runtime-manifest "${{ steps.exact.outputs.runtime_manifest }}" \
+            --package-root "$RUNNER_TEMP/staging" \
+            --platform "$EVALUATOR_PLATFORM" \
+            --report "$RUNNER_TEMP/receipts/runtime-post.json"
+          sha256sum "${{ steps.exact.outputs.runtime_executable }}" \
+            > "$RUNNER_TEMP/receipts/runtime-executable-post.sha256"
+          cmp "$RUNNER_TEMP/receipts/candidate-pre.json" "$RUNNER_TEMP/receipts/candidate-post.json"
+          cmp "$RUNNER_TEMP/receipts/runtime-pre.json" "$RUNNER_TEMP/receipts/runtime-post.json"
+          cmp "$RUNNER_TEMP/receipts/runtime-executable-pre.sha256" "$RUNNER_TEMP/receipts/runtime-executable-post.sha256"
+      - name: Score deterministic quality gate
+        run: |
+          set -euo pipefail
+          supervisor="$RUNNER_TEMP/evidence/supervisor/supervisor.json"
+          isolation_id="gha-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          sb-models evaluate \
+            --repo-root "$GITHUB_WORKSPACE" \
+            --manifest "${{ steps.exact.outputs.manifest_path }}" \
+            --predictions "$RUNNER_TEMP/evidence/runtime/predictions.jsonl" \
+            --output "$RUNNER_TEMP/evidence/result.json" \
+            --runner-id github-actions-isolated \
+            --runner-version 0.1.0 \
+            --runtime-version "${{ steps.exact.outputs.runtime_version }}" \
+            --runtime-platform "$EVALUATOR_PLATFORM" \
+            --runtime-package-sha256 "${{ steps.exact.outputs.runtime_package_sha256 }}" \
+            --isolation-id "$isolation_id" \
+            --isolation-evidence "$RUNNER_TEMP/receipts/isolation.json" \
+            --runtime-started-at "$(jq -er '.runtime_started_at' "$supervisor")" \
+            --inference-started-at "$(jq -er '.inference_started_at' "$supervisor")" \
+            --inference-finished-at "$(jq -er '.inference_finished_at' "$supervisor")" \
+            --runtime-finished-at "$(jq -er '.runtime_finished_at' "$supervisor")" \
+            --require-pass
+      - name: Retain evaluation result and security receipts
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: evaluation-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/receipts
+            ${{ runner.temp }}/evidence/supervisor
+            ${{ runner.temp }}/evidence/runtime/predictions.jsonl
+            ${{ runner.temp }}/evidence/runtime/probe.json
+            ${{ runner.temp }}/evidence/result.json
+          if-no-files-found: error
+          retention-days: 30
