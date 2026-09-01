@@ -88,6 +88,43 @@ def test_successful_exact_runtime_exec_proves_monitor_started_first(tmp_path: Pa
     assert evidence["monitor_started_before_runtime"] is True
 
 
+def test_trusted_wrapper_ipc_before_exact_runtime_exec_is_not_attributed_to_runtime(tmp_path: Path) -> None:
+    trace = tmp_path / "trace.100"
+    trace.write_text(
+        'socket(AF_UNIX, SOCK_STREAM|SOCK_CLOEXEC, 0) = 3\n'
+        'connect(3, {sa_family=AF_UNIX, sun_path="/var/run/nscd/socket"}, 110) = -1 ENOENT\n'
+        'execve("/tmp/llama-server", ["/tmp/llama-server"], 0x1234) = 0\n'
+        'socket(AF_INET, SOCK_STREAM|SOCK_CLOEXEC, IPPROTO_IP) = 3\n'
+        'bind(3, {sa_family=AF_INET, sin_port=htons(8080), sin_addr=inet_addr("127.0.0.1")}, 16) = 0\n',
+        encoding="utf-8",
+    )
+    evidence = check_strace_logs([trace], expected_runtime_executable=Path("/tmp/llama-server"))
+    assert evidence["network_attempts_observed"] == 0
+
+
+def test_process_creation_before_exact_runtime_exec_is_rejected(tmp_path: Path) -> None:
+    trace = tmp_path / "trace.100"
+    trace.write_text(
+        'clone(child_stack=NULL, flags=SIGCHLD) = 101\n'
+        'execve("/tmp/llama-server", ["/tmp/llama-server"], 0x1234) = 0\n'
+        'socket(AF_INET, SOCK_STREAM, IPPROTO_IP) = 3\n',
+        encoding="utf-8",
+    )
+    with pytest.raises(EvaluationError, match="before the exact runtime launch"):
+        check_strace_logs([trace], expected_runtime_executable=Path("/tmp/llama-server"))
+
+
+def test_runtime_ipc_after_exact_exec_remains_rejected(tmp_path: Path) -> None:
+    trace = tmp_path / "trace.100"
+    trace.write_text(
+        'execve("/tmp/llama-server", ["/tmp/llama-server"], 0x1234) = 0\n'
+        'socket(AF_UNIX, SOCK_STREAM|SOCK_CLOEXEC, 0) = 3\n',
+        encoding="utf-8",
+    )
+    with pytest.raises(EvaluationError, match="network access"):
+        check_strace_logs([trace], expected_runtime_executable=Path("/tmp/llama-server"))
+
+
 def test_missing_exact_runtime_exec_cannot_claim_start_order(tmp_path: Path) -> None:
     trace = tmp_path / "trace.100"
     trace.write_text(
@@ -95,7 +132,7 @@ def test_missing_exact_runtime_exec_cannot_claim_start_order(tmp_path: Path) -> 
         'socket(AF_INET, SOCK_STREAM, IPPROTO_IP) = 3\n',
         encoding="utf-8",
     )
-    with pytest.raises(EvaluationError, match="exact runtime executable"):
+    with pytest.raises(EvaluationError, match="exactly one launch"):
         check_strace_logs([trace], expected_runtime_executable=Path("/tmp/llama-server"))
 
 

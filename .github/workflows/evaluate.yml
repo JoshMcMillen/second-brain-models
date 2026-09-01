@@ -173,6 +173,11 @@ jobs:
             --platform "$EVALUATOR_PLATFORM" \
             --destination "$RUNNER_TEMP/runtime" \
             > "$RUNNER_TEMP/receipts/runtime-extract.json"
+          # The runner temp root is private by default. Grant traverse-only
+          # access so the dropped runtime identity can reach only known paths.
+          sudo chmod o=x "$RUNNER_TEMP"
+          sudo chown -R root:root "$RUNNER_TEMP/runtime"
+          sudo chmod -R go-w "$RUNNER_TEMP/runtime"
           sudo chown root:root \
             "${{ steps.exact.outputs.model_path }}" \
             "${{ steps.exact.outputs.runtime_archive }}" \
@@ -181,6 +186,8 @@ jobs:
             "${{ steps.exact.outputs.model_path }}" \
             "${{ steps.exact.outputs.runtime_archive }}"
           sudo chmod 0555 "${{ steps.exact.outputs.runtime_executable }}"
+          sudo -u nobody /usr/bin/test -x "${{ steps.exact.outputs.runtime_executable }}"
+          sudo -u nobody /usr/bin/test -r "${{ steps.exact.outputs.model_path }}"
           sha256sum "${{ steps.exact.outputs.runtime_executable }}" \
             > "$RUNNER_TEMP/receipts/runtime-executable-pre.sha256"
       - name: Run runtime and synthetic suite in one disconnected namespace
