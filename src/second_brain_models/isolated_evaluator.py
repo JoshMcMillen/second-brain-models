@@ -8,6 +8,7 @@ from pathlib import Path
 import shutil
 import signal
 import socket
+import stat
 import subprocess
 import time
 from typing import Any
@@ -134,6 +135,44 @@ def _require_root_owned_read_only(path: Path, label: str, *, executable: bool) -
         raise EvaluationError(f"{label} must remain executable")
 
 
+def _paths_overlap(left: Path, right: Path) -> bool:
+    try:
+        left.relative_to(right)
+        return True
+    except ValueError:
+        pass
+    try:
+        right.relative_to(left)
+        return True
+    except ValueError:
+        return False
+
+
+def _require_root_owned_runtime_tree(runtime_root: Path, runtime_binary: Path) -> None:
+    if not runtime_root.is_dir():
+        raise EvaluationError("reviewed runtime root is missing or not a directory")
+    try:
+        runtime_binary.relative_to(runtime_root)
+    except ValueError as exc:
+        raise EvaluationError("runtime executable must be inside the reviewed runtime root") from exc
+
+    for current_root, directory_names, file_names in os.walk(runtime_root, followlinks=False):
+        current = Path(current_root)
+        members = [current, *(current / name for name in directory_names), *(current / name for name in file_names)]
+        for member in members:
+            metadata = member.lstat()
+            if stat.S_ISLNK(metadata.st_mode):
+                raise EvaluationError(f"reviewed runtime tree contains a symlink: {member}")
+            if stat.S_ISDIR(metadata.st_mode):
+                if metadata.st_uid != 0 or metadata.st_mode & 0o022:
+                    raise EvaluationError(f"reviewed runtime directory is not root-owned read-only: {member}")
+                continue
+            if not stat.S_ISREG(metadata.st_mode):
+                raise EvaluationError(f"reviewed runtime tree contains a special file: {member}")
+            if metadata.st_uid != 0 or metadata.st_mode & 0o022:
+                raise EvaluationError(f"reviewed runtime file is not root-owned read-only: {member}")
+
+
 def _run_trusted(command: list[str], *, environment: dict[str, str], timeout: int) -> None:
     try:
         subprocess.run(
@@ -162,9 +201,10 @@ def _apply_runtime_process_limits() -> None:
 
 def run_isolated_evaluation(
     *, repo_root: Path | str, python_executable: Path | str,
-    runtime_executable: Path | str, model_path: Path | str, port: int,
+    runtime_root: Path | str, runtime_executable: Path | str,
+    model_path: Path | str, port: int,
     isolation_id: str, supervisor_root: Path | str, runtime_output_root: Path | str,
-    artifact_reader_gid: int,
+    runtime_scratch_root: Path | str, artifact_reader_gid: int,
 ) -> dict[str, Any]:
     """Run a dropped-privilege runtime and trusted client in one namespace.
 
@@ -187,16 +227,19 @@ def run_isolated_evaluation(
 
     root = Path(repo_root).resolve()
     python = Path(python_executable).resolve()
+    runtime_root_input = Path(runtime_root)
     runtime_input = Path(runtime_executable)
     model_input = Path(model_path)
-    if runtime_input.is_symlink() or model_input.is_symlink():
+    if runtime_root_input.is_symlink() or runtime_input.is_symlink() or model_input.is_symlink():
         raise EvaluationError("isolated evaluator refuses symlink runtime/model inputs")
+    reviewed_runtime_root = runtime_root_input.resolve()
     runtime_binary = runtime_input.resolve()
     model = model_input.resolve()
     if not python.is_file() or not runtime_binary.is_file() or not model.is_file():
         raise EvaluationError("isolated evaluator input executable or model is missing")
     _require_root_owned_read_only(runtime_binary, "runtime executable", executable=True)
     _require_root_owned_read_only(model, "model artifact", executable=False)
+    _require_root_owned_runtime_tree(reviewed_runtime_root, runtime_binary)
 
     trusted_path = "/usr/sbin:/usr/bin:/sbin:/bin"
     strace = shutil.which("strace", path=trusted_path)
@@ -208,10 +251,23 @@ def run_isolated_evaluation(
 
     supervisor_input = Path(supervisor_root)
     runtime_output_input = Path(runtime_output_root)
-    if supervisor_input.is_symlink() or runtime_output_input.is_symlink():
+    runtime_scratch_input = Path(runtime_scratch_root)
+    if (
+        supervisor_input.is_symlink()
+        or runtime_output_input.is_symlink()
+        or runtime_scratch_input.is_symlink()
+    ):
         raise EvaluationError("isolated evaluator refuses symlink output roots")
     supervisor = supervisor_input.resolve()
     runtime_output = runtime_output_input.resolve()
+    runtime_scratch = runtime_scratch_input.resolve()
+    output_roots = (supervisor, runtime_output, runtime_scratch)
+    if any(
+        _paths_overlap(left, right)
+        for index, left in enumerate(output_roots)
+        for right in output_roots[index + 1:]
+    ):
+        raise EvaluationError("isolated evaluator output and scratch roots must not overlap")
     _require_fresh_directory(supervisor, mode=0o750)
     _require_fresh_directory(runtime_output, mode=0o750)
     os.chown(supervisor, 0, artifact_reader_gid)
@@ -225,9 +281,8 @@ def run_isolated_evaluation(
     if pwd is None or resource is None:
         raise EvaluationError("isolated evaluator requires the POSIX account and resource-limit APIs")
     nobody = pwd.getpwnam("nobody")
-    runtime_home = runtime_output.parent / f"{runtime_output.name}-runtime-home"
-    _require_fresh_directory(runtime_home, mode=0o700)
-    os.chown(runtime_home, nobody.pw_uid, nobody.pw_gid)
+    _require_fresh_directory(runtime_scratch, mode=0o700)
+    os.chown(runtime_scratch, nobody.pw_uid, nobody.pw_gid)
     trusted_home = runtime_output / "trusted-home"
     trusted_home.mkdir(mode=0o700)
     predictions = runtime_output / "predictions.jsonl"
@@ -243,12 +298,13 @@ def run_isolated_evaluation(
         raise EvaluationError(f"could not enable loopback in isolated namespace: {exc}") from exc
 
     runtime_environment = {
-        "HOME": str(runtime_home),
+        "HOME": str(runtime_scratch),
         "LANG": "C.UTF-8",
         "LC_ALL": "C.UTF-8",
+        "LD_LIBRARY_PATH": str(runtime_binary.parent),
         "PATH": "/usr/bin:/bin",
         "SB_MODELS_NETWORK_MODE": "none",
-        "TMPDIR": str(runtime_home),
+        "TMPDIR": str(runtime_scratch),
     }
     trusted_environment = {
         "HOME": str(trusted_home),
