@@ -348,6 +348,10 @@ def _validate_tier_quality(evaluation: dict[str, Any], count: int) -> None:
                 raise PolicyError(f"{where} totals must be non-negative integers")
             if minimum_passed > count or minimum_typed > count:
                 raise PolicyError(f"{where} totals exceed the suite size")
+            if minimum_typed < minimum_passed:
+                raise PolicyError(
+                    f"{where} minimum_valid_typed_outputs must be at least minimum_passed_cases"
+                )
             floor_passed, floor_typed, task_floors = guardrail_floors[tier][channel]
             if minimum_passed < floor_passed or minimum_typed < floor_typed:
                 raise PolicyError(f"{where} is below the repository quality guardrail")

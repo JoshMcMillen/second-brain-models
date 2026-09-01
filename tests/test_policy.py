@@ -88,6 +88,26 @@ def test_parser_accepts_future_tier_policy_without_repository_switch(policy_repo
     assert bundle["promotion"]["evaluation"]["tier_thresholds"]["standard"]["beta"]["minimum_passed_cases"] == 21
 
 
+def test_future_tier_policy_rejects_typed_floor_below_pass_floor(policy_repo: Path) -> None:
+    path = policy_repo / "policy" / "promotion-v1.yaml"
+    _write_future_tier_quality_shape(path)
+    value = yaml.safe_load(path.read_text(encoding="utf-8"))
+    value["evaluation"]["tier_thresholds"]["plus"]["beta"].update({
+        "minimum_passed_cases": 30,
+        "minimum_valid_typed_outputs": 29,
+    })
+    value["evaluation"]["tier_thresholds"]["plus"]["stable"].update({
+        "minimum_passed_cases": 30,
+        "minimum_valid_typed_outputs": 30,
+    })
+    path.write_text(yaml.safe_dump(value, sort_keys=False), encoding="utf-8")
+    with pytest.raises(
+        PolicyError,
+        match="minimum_valid_typed_outputs must be at least minimum_passed_cases",
+    ):
+        load_policy_bundle(policy_repo)
+
+
 def test_mixed_legacy_and_tier_shapes_are_rejected(policy_repo: Path) -> None:
     path = policy_repo / "policy" / "promotion-v1.yaml"
     original = yaml.safe_load(path.read_text(encoding="utf-8"))["evaluation"]
