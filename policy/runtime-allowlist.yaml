@@ -92,7 +92,13 @@ allowed_runtime_families:
       - automatic-model-pull
       - telemetry
 
-approved_runtime_manifests: []
+approved_runtime_manifests:
+  - manifest_path: runtimes/llama.cpp-b10731-linux-x86_64/manifest.json
+    manifest_sha256: 11ec9f9de8893b9ed19ae7e0199298453b4fce9d5b60749235eef12ec1ba0da2
+    runtime_id: llama.cpp-server
+    version: b10731-linux-x86_64
+    revision: 0eadefebd3f8f92a86d634a0e5b8fffc9dc792c0
+    decision: approved
 
 admission_rules:
   generic_family_approval_allowed: false
