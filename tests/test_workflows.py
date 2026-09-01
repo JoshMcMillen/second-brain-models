@@ -64,4 +64,7 @@ def test_privileged_and_candidate_workflows_fail_safe() -> None:
     assert "ref: ${{ github.sha }}" in evaluation
     assert "if: always()" in evaluation
     assert "--require-pass" in evaluation
+    assert '--output "$RUNNER_TEMP/results/result.json"' in evaluation
+    assert '--output "$RUNNER_TEMP/evidence/result.json"' not in evaluation
+    assert "--runner-version 0.2.0" in evaluation
     assert "predictions_artifact_run_id" not in evaluation
