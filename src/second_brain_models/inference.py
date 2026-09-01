@@ -28,6 +28,7 @@ def run_loopback_inference(*, repo_root: Path, output_path: Path, port: int) -> 
             )
             body = canonical_bytes({
                 "model": "local", "temperature": 0, "seed": 0, "stream": False,
+                "max_tokens": 512, "response_format": {"type": "json_object"},
                 "messages": [{"role": "system", "content": "You are a deterministic local read-only JSON transformer."}, {"role": "user", "content": prompt}],
             })
             request = urllib.request.Request(endpoint, data=body, method="POST", headers={"Content-Type": "application/json"})

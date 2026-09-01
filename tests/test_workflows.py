@@ -48,5 +48,12 @@ def test_privileged_and_candidate_workflows_fail_safe() -> None:
         assert "git push" not in text
 
     evaluation = (WORKFLOW_ROOT / "evaluate.yml").read_text(encoding="utf-8")
-    assert "disconnected-evaluation-not-yet-enabled" in evaluation
-    assert "FAIL CLOSED:" in evaluation
+    assert "evaluate-exact-candidate" in evaluation
+    assert "disconnected-evaluation-not-yet-enabled" not in evaluation
+    assert "sudo unshare" in evaluation
+    assert "--mount --net --pid --fork --mount-proc --kill-child=SIGKILL" in evaluation
+    assert "--expected-runtime-executable" in evaluation
+    assert "ref: ${{ github.sha }}" in evaluation
+    assert "if: always()" in evaluation
+    assert "--require-pass" in evaluation
+    assert "predictions_artifact_run_id" not in evaluation

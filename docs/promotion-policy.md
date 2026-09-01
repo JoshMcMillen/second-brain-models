@@ -19,6 +19,8 @@ stable -> revoked
 
 Discovery, validation, and evaluation may be automated. Beta, stable, and revocation require the protected publishing environment and an owner decision.
 
+The repository's evaluation workflow is a protected manual dispatch for one canonical manifest path. After the environment reviewer approves the run, every remaining download, static check, namespace-isolated runtime execution, synthetic inference, deterministic score, and evidence upload is automated in one job. It has no hardware matrix, R2 dependency, release credential, or promotion authority.
+
 ## Candidate requirements
 
 ### Provenance
