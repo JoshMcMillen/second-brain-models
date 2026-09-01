@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 import re
 
@@ -48,16 +49,33 @@ def test_privileged_and_candidate_workflows_fail_safe() -> None:
         assert "git push" not in text
 
     evaluation = (WORKFLOW_ROOT / "evaluate.yml").read_text(encoding="utf-8")
+    evaluation_document = yaml.safe_load(evaluation)
+    evaluation_triggers = evaluation_document.get("on", evaluation_document.get(True))
+    evaluation_job = evaluation_document["jobs"]["evaluate-exact-candidate"]
+    assert evaluation_document["permissions"] == {"contents": "read"}
+    assert evaluation_triggers["push"] == {
+        "branches": ["main"],
+        "paths": ["models/*/manifest.json"],
+    }
+    assert "github.ref_type == 'branch'" in evaluation_job["if"]
+    assert "github.ref == 'refs/heads/main'" in evaluation_job["if"]
+    assert "github.ref_protected" in evaluation_job["if"]
+    assert evaluation_job["environment"]["name"] == (
+        "${{ github.event_name == 'push' && "
+        "'model-evaluation-auto' || 'model-evaluation' }}"
+    )
     assert "evaluate-exact-candidate" in evaluation
     assert re.search(r"(?m)^  push:\s*$", evaluation)
     assert re.search(r'(?m)^      - "models/\*/manifest\.json"\s*$', evaluation)
     assert "github.event_name == 'push'" in evaluation
     assert "Resolve reviewed candidate manifest" in evaluation
     assert "Exactly one added or modified model manifest is required" in evaluation
+    assert "Automatic evaluation accepts only a quarantined candidate manifest" in evaluation
+    assert "(.promotion.channel == \"candidate\")" in evaluation
+    assert "(.promotion.status == \"quarantined\")" in evaluation
     assert "git diff --diff-filter=AMR --name-only" in evaluation
     assert "fetch-depth: 0" in evaluation
     assert "model-evaluation-auto" in evaluation
-    assert "github.event.repository.default_branch" in evaluation
     assert "DISPATCH_MANIFEST_PATH: ${{ inputs.manifest_path }}" in evaluation
     assert "INPUT_MANIFEST_PATH: ${{ inputs.manifest_path }}" not in evaluation
     assert "disconnected-evaluation-not-yet-enabled" not in evaluation
@@ -79,3 +97,17 @@ def test_privileged_and_candidate_workflows_fail_safe() -> None:
     assert '--output "$RUNNER_TEMP/evidence/result.json"' not in evaluation
     assert "--runner-version 0.2.0" in evaluation
     assert "predictions_artifact_run_id" not in evaluation
+
+    auto_environment = json.loads(
+        (WORKFLOW_ROOT.parent / "settings" / "model-evaluation-auto-environment.json")
+        .read_text(encoding="utf-8")
+    )
+    assert auto_environment == {
+        "wait_timer": 0,
+        "prevent_self_review": False,
+        "reviewers": [],
+        "deployment_branch_policy": {
+            "protected_branches": True,
+            "custom_branch_policies": False,
+        },
+    }

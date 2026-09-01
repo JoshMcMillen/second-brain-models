@@ -91,7 +91,7 @@ jobs:
       - run: python -m pytest
 
   evaluate-exact-candidate:
-    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.ref_name == github.event.repository.default_branch)
+    if: github.ref_type == 'branch' && github.ref == 'refs/heads/main' && github.ref_protected && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     environment:
@@ -139,6 +139,12 @@ jobs:
           fi
           if [[ ! -f "$manifest_path" || -L "$manifest_path" ]]; then
             echo "Manifest must be a regular, non-symlink file." >&2
+            exit 2
+          fi
+          if ! jq -e \
+            '(.promotion.channel == "candidate") and (.promotion.status == "quarantined")' \
+            "$manifest_path" > /dev/null; then
+            echo "Automatic evaluation accepts only a quarantined candidate manifest." >&2
             exit 2
           fi
           printf 'manifest_path=%s\n' "$manifest_path" >> "$GITHUB_OUTPUT"
