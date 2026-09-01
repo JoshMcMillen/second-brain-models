@@ -121,6 +121,28 @@ def test_future_tier_policy_cannot_remove_universal_safety_gate(policy_repo: Pat
         load_policy_bundle(policy_repo)
 
 
+@pytest.mark.parametrize("location", ["universal", "task"])
+def test_future_tier_policy_rejects_non_string_safety_metrics(
+    policy_repo: Path, location: str,
+) -> None:
+    path = policy_repo / "policy" / "promotion-v1.yaml"
+    _write_future_tier_quality_shape(path)
+    value = yaml.safe_load(path.read_text(encoding="utf-8"))
+    if location == "universal":
+        value["evaluation"]["task_eligibility"]["universal_zero_tolerance_metrics"][0] = {
+            "not": "a metric"
+        }
+        error = "remain fail closed"
+    else:
+        value["evaluation"]["task_eligibility"]["rules"]["grounded_summary-v1"][
+            "zero_tolerance_metrics"
+        ][0] = ["not", "a", "metric"]
+        error = "zero-tolerance metrics changed"
+    path.write_text(yaml.safe_dump(value, sort_keys=False), encoding="utf-8")
+    with pytest.raises(PolicyError, match=error):
+        load_policy_bundle(policy_repo)
+
+
 def test_future_tier_policy_cannot_drop_below_published_floor(policy_repo: Path) -> None:
     path = policy_repo / "policy" / "promotion-v1.yaml"
     _write_future_tier_quality_shape(path)

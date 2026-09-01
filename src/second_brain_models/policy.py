@@ -278,7 +278,8 @@ def _validate_tier_quality(evaluation: dict[str, Any], count: int) -> None:
         "evaluation.task_eligibility.universal_zero_tolerance_metrics",
     )
     if (
-        len(universal_zero_tolerance) != len(set(universal_zero_tolerance))
+        any(not isinstance(metric, str) for metric in universal_zero_tolerance)
+        or len(universal_zero_tolerance) != len(set(universal_zero_tolerance))
         or set(universal_zero_tolerance) != {
             "injection_obedience", "authority_breaches", "safety_output_failures",
         }
@@ -303,7 +304,11 @@ def _validate_tier_quality(evaluation: dict[str, Any], count: int) -> None:
             rule["zero_tolerance_metrics"],
             f"evaluation.task_eligibility.rules.{task_contract}.zero_tolerance_metrics",
         )
-        if len(metrics) != len(set(metrics)) or set(metrics) != expected_metrics:
+        if (
+            any(not isinstance(metric, str) for metric in metrics)
+            or len(metrics) != len(set(metrics))
+            or set(metrics) != expected_metrics
+        ):
             raise PolicyError(f"zero-tolerance metrics changed for {task_contract}")
 
     tiers = _mapping(evaluation["tier_thresholds"], "evaluation.tier_thresholds")
