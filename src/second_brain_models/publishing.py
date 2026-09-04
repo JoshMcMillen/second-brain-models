@@ -122,6 +122,32 @@ class GhCliReleaseTransport:
         self._run(["release", "delete", release, "--repo", repository, "--yes", "--cleanup-tag"])
 
 
+_CONTRACT_FIXTURE_DIRECTORIES = ("schemas", "fixtures/signing")
+
+
+def contract_fixture_assets(repo_root: Path | str) -> tuple[ReleaseAsset, ...]:
+    """The cross-repo contract surface every catalog release always attaches.
+
+    docs/consumer-contract-v1.md documents a stable URL formula so Second
+    Brain's own tests can fetch these directly from any release: the
+    versioned JSON Schemas plus fixtures/signing (a valid fixture key,
+    catalog, and signature, and at least two invalid fixtures a consumer's
+    tests can assert fail verification). Every catalog release carries them,
+    even the empty catalog published before any model is approved.
+    """
+    root = Path(repo_root).resolve()
+    assets: list[ReleaseAsset] = []
+    for directory in _CONTRACT_FIXTURE_DIRECTORIES:
+        source_dir = root / directory
+        if not source_dir.is_dir():
+            continue
+        for path in sorted(source_dir.iterdir()):
+            if path.is_file():
+                relative = path.relative_to(root).as_posix()
+                assets.append(_asset(base=root, source_relative=relative))
+    return tuple(assets)
+
+
 def _asset(
     *, base: Path, source_relative: str, identity_path: str | None = None,
     expected_sha256: str | None = None, expected_size: int | None = None,
@@ -233,6 +259,12 @@ def plan_release(
             },
         }
         new_entries.append(entry_with_assets)
+
+    # The contract surface (schemas + fixtures/signing) rides along on every
+    # release, independent of catalog entries, so it is always attached even
+    # when the catalog itself is empty (see contract_fixture_assets()).
+    for asset in contract_fixture_assets(root):
+        registry.setdefault(asset.repo_path, asset)
 
     new_catalog = dict(catalog)
     new_catalog["entries"] = new_entries

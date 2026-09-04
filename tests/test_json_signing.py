@@ -43,3 +43,22 @@ def test_committed_catalog_signature_fixture() -> None:
         REPO_ROOT / "fixtures" / "signing" / "catalog-v1.json.sig",
         public_key=load_public_key(REPO_ROOT / "fixtures" / "signing" / "catalog-fixture-public.pem"),
     )
+
+
+def test_committed_invalid_signing_fixtures_fail_verification() -> None:
+    """Two invalid fixtures a consumer's own tests can exercise (docs/consumer-contract-v1.md)."""
+    public_key = load_public_key(REPO_ROOT / "fixtures" / "signing" / "catalog-fixture-public.pem")
+
+    with pytest.raises(SignatureError, match="does not match"):
+        verify_document(
+            REPO_ROOT / "fixtures" / "signing" / "catalog-v1.json",
+            REPO_ROOT / "fixtures" / "signing" / "catalog-v1.bad-signature.json.sig",
+            public_key=public_key,
+        )
+
+    with pytest.raises(SignatureError, match="does not match"):
+        verify_document(
+            REPO_ROOT / "fixtures" / "signing" / "catalog-v1.tampered.json",
+            REPO_ROOT / "fixtures" / "signing" / "catalog-v1.json.sig",
+            public_key=public_key,
+        )

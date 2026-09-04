@@ -206,6 +206,28 @@ V1 consumers MUST reject unknown major `schema_version` values. Additive fields 
 
 Catalog versions are monotonically increasing integers within each channel. A beta catalog and stable catalog maintain independent version counters.
 
+## Contract fixtures for Second Brain's own tests
+
+Every catalog release -- `beta`, `stable`, or `revoked`, including an empty one with zero installable entries -- always also attaches this project's versioned JSON Schemas (`schemas/*.json`) and its signing fixtures (`fixtures/signing/`): a valid fixture public key, a valid fixture catalog, its valid detached signature, and at least two invalid fixtures (a bad signature and tampered catalog bytes) a consumer's own tests can assert fail verification. This lets Second Brain's test suite exercise this project's exact schemas and its exact canonicalize/sign/verify behavior -- including the negative cases -- against real committed bytes, without vendoring copies that can drift.
+
+The URL for any of these files follows the same deterministic formula `sb-models publish` uses for every other object (`docs/publishing-interface-v1.md`), and is stable enough for a test suite to construct without an API call:
+
+```text
+https://github.com/<owner>/<repo>/releases/download/<release>/<flattened-path>
+```
+
+- `<release>` is `catalog-<channel>-v<catalog_version>`, using the exact `channel` and `catalog_version` of a catalog the client has already fetched and signature-verified (never a value the client invents).
+- `<flattened-path>` is the file's path relative to the repository root with every `/` replaced by `-` (GitHub Releases assets share one flat namespace and forbid path separators in a filename).
+
+For example, once `catalog-beta-v1` is published, `schemas/catalog-v1.schema.json` and `fixtures/signing/catalog-v1.bad-signature.json.sig` are, respectively:
+
+```text
+https://github.com/JoshMcMillen/second-brain-models/releases/download/catalog-beta-v1/schemas-catalog-v1.schema.json
+https://github.com/JoshMcMillen/second-brain-models/releases/download/catalog-beta-v1/fixtures-signing-catalog-v1.bad-signature.json.sig
+```
+
+These fixture files are not schema-validated catalog entries and carry no signature of their own beyond the ordinary GitHub Release; a test fetching them still MUST verify any digest it independently cares about rather than trusting transport alone.
+
 ## Privacy
 
 Catalog checks and artifact downloads necessarily reveal ordinary connection metadata to the distribution provider. They MUST remain independent of inference. The companion project and distribution layer never receive prompts, documents, embeddings, local database records, model output, or content-derived telemetry.
