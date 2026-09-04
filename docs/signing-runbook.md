@@ -87,6 +87,8 @@ The protected workflow must:
 
 Never log the private key, secret environment value, or command environment. Do not upload signing material to R2.
 
+`sb-models publish` implements steps 6-9 for the interim `github-release` host (`docs/publishing-interface-v1.md`): every referenced model, runtime, license, and result object is individually re-downloaded and its byte size and SHA-256 re-verified, in addition to the catalog and signature themselves, before the draft release is moved out of draft. Any verification failure deletes the draft release rather than leaving a half-published one.
+
 ## Catalog expiry and rollback
 
 Each channel has its own monotonically increasing `catalog_version`. A client remembers the highest accepted version and rejects lower versions.

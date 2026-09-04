@@ -52,6 +52,10 @@
     "promotion_policy": {
       "const": "promotion-v1"
     },
+    "distribution": {
+      "description": "Additive v1 field: the asset host that produced this exact signed catalog (sb-models publish). Its absence means the catalog was built but not yet published, so a client MAY ignore it under the schema_version 1 compatibility rule.",
+      "$ref": "#/$defs/distribution"
+    },
     "entries": {
       "type": "array",
       "uniqueItems": true,
@@ -104,6 +108,77 @@
     "sha256": {
       "type": "string",
       "pattern": "^[0-9a-f]{64}$"
+    },
+    "distribution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "host",
+        "release"
+      ],
+      "properties": {
+        "host": {
+          "type": "string",
+          "enum": [
+            "github-release",
+            "r2"
+          ]
+        },
+        "release": {
+          "description": "Immutable-once-published release/tag name this catalog and every entries[].assets URL was uploaded to.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-z0-9][a-z0-9.-]*$"
+        }
+      }
+    },
+    "releaseAssets": {
+      "description": "Additive v1 field: the exact download URLs sb-models publish computed and verified for one entry's objects on the current distribution host. Absent on a catalog that was only built, not yet published.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "artifact_url",
+        "license_url",
+        "runtime_license_url",
+        "result_url",
+        "runtime_package_urls"
+      ],
+      "properties": {
+        "artifact_url": {
+          "type": "string",
+          "format": "uri",
+          "pattern": "^https://"
+        },
+        "license_url": {
+          "type": "string",
+          "format": "uri",
+          "pattern": "^https://"
+        },
+        "runtime_license_url": {
+          "type": "string",
+          "format": "uri",
+          "pattern": "^https://"
+        },
+        "result_url": {
+          "type": "string",
+          "format": "uri",
+          "pattern": "^https://"
+        },
+        "runtime_package_urls": {
+          "description": "Keyed by runtime_manifest.packages[].platform; one entry per published platform package.",
+          "type": "object",
+          "minProperties": 1,
+          "propertyNames": {
+            "pattern": "^[a-z0-9][a-z0-9._-]*$"
+          },
+          "additionalProperties": {
+            "type": "string",
+            "format": "uri",
+            "pattern": "^https://"
+          }
+        }
+      }
     },
     "catalogEntry": {
       "type": "object",
@@ -165,6 +240,9 @@
               "type": "null"
             }
           ]
+        },
+        "assets": {
+          "$ref": "#/$defs/releaseAssets"
         }
       },
       "allOf": [

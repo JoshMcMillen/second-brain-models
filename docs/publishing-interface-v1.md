@@ -1,17 +1,29 @@
 # Publishing workflow boundary v1
 
-The `publish.yml` and `revoke.yml` workflows are intentionally fail-closed before they mutate Git. Signing a catalog is not publication by itself.
+Signing a catalog is not publication by itself. `publish.yml` used to be intentionally fail-closed after signing because no artifact-first receipt existed. `revoke.yml` still is, for the same reason: revocation has no separate host-selection or upload path yet, and a revoked catalog must not go live without the same discipline.
 
-Before those gates may be enabled, a protected-environment implementation must produce and verify one release receipt that proves, in order:
+## Interim host: GitHub Releases (implemented)
 
-1. Every model object was uploaded to `models/sha256/<digest>/model.gguf`.
-2. Every runtime package was uploaded to `runtimes/sha256/<digest>/<platform-package>`.
-3. Every model and runtime license was read from the manifest-adjacent repository `LICENSE`, matched its signed repository path, byte size, and SHA-256, and was uploaded to `licenses/<sha256>/LICENSE` before any catalog.
-4. Each object was fetched again through `https://models.avnxmcp.org` with redirects disabled.
-5. The fetched byte count and SHA-256 matched the exact signed manifest/catalog values.
-6. The new signed channel catalog and detached signature were uploaded last and fetched back for Ed25519 verification.
+`publish.yml` now runs `sb-models publish` (see `second_brain_models/publishing.py` and `second_brain_models/hosting.py`), which produces and verifies exactly the release receipt this document has always required, using GitHub Releases as the asset host while Cloudflare R2 is not yet enabled (`docs/cloudflare-setup.md`):
 
-The receipt must be canonical JSON, name the protected workflow run and channel/catalog version, list each public URL, byte size, SHA-256, and verification result, and itself be retained as a workflow artifact. R2 ETags are not acceptable digest evidence. Until this interface exists, the workflows exit nonzero and do not commit release or revocation state.
+1. The catalog channel/version determine one immutable release name, `catalog-<channel>-v<catalog_version>`, and every referenced object's final download URL is computed from that name and its own repository-relative path -- deterministically, with no network call.
+2. The catalog is built with those URLs already present in each entry's additive `assets` field, then signed. Nothing about the catalog changes after this point.
+3. A draft release is created. Every referenced model object, runtime package, model/runtime license, and evaluation result is uploaded to it.
+4. Each object is fetched back from the draft release and its byte count and SHA-256 are compared against the exact signed catalog values. R2 ETags (and their GitHub Releases equivalent) are never accepted as digest evidence on their own; this project always recomputes SHA-256 over the fetched bytes.
+5. Only after every object verifies does the workflow attach the signed catalog JSON, its detached signature, and the public key to the same release and move it out of draft. Immutable once published: nothing about a published release's assets is rewritten afterward.
+6. Any verification failure deletes the draft release and the workflow exits nonzero; the previously published catalog for that channel remains the latest live state.
+
+The release receipt (`--receipt`) is canonical JSON naming the workflow run, channel, catalog version, release name, host, and repository, and listing every uploaded object's repository path, asset filename, URL, SHA-256, size, and verification result. It is retained as a workflow artifact.
+
+For an empty catalog (no approved manifest for that channel yet), the referenced-object list is empty; publication still attaches the catalog, its signature, and the public key, so the channel's signed-but-empty catalog is real and independently verifiable from day one.
+
+## Production host: Cloudflare R2 (documented, not implemented)
+
+`second_brain_models.hosting.resolve_asset_url(host="r2", ...)` is reserved for the eventual move to the production `models.avnxmcp.org` custom domain and fails closed with a pointer to this section until it is implemented. Selecting it will follow the same contract: compute final URLs before signing, sign, upload, re-download and verify, then publish -- see `docs/cloudflare-setup.md` for the two-bucket layout and upload order. Moving from `github-release` to `r2` is a one-line `--host` change at the call site; it does not change the receipt shape, the catalog schema's additive `distribution`/`assets` fields, or the consumer contract.
+
+## Revocation
+
+`revoke.yml` still exits nonzero after signing a revocation record and rebuilding `catalog/revoked.json`: it has no upload/verify path of its own yet. The same `sb-models publish --channel revoked ...` flow used for `beta`/`stable` is the natural next step, gated on the same protected `model-publish` environment; it is not wired into `revoke.yml` in this change.
 
 `evaluate.yml` implements the separate evaluation boundary. A protected manual run downloads the manifest-pinned public upstream model and Linux runtime package, verifies exact size and SHA-256, performs static checks and guarded extraction, and then starts the runtime under `strace` inside one new network/PID/mount namespace. The runtime executes as `nobody` with capabilities removed, a scrubbed environment, bounded OS resources, CPU-only/offline flags, and only a `127.0.0.1` endpoint. The trusted probe and 30-case client run in that same namespace.
 

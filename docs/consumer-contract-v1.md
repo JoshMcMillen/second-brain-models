@@ -93,9 +93,15 @@ The exact JSON Schema will be versioned in `schemas/catalog-v1.schema.json`. The
   "expires_at": "2026-09-08T18:00:00Z",
   "key_id": "sha256:<64-lowercase-hex-public-key-fingerprint>",
   "promotion_policy": "promotion-v1",
+  "distribution": {
+    "host": "github-release",
+    "release": "catalog-stable-v14"
+  },
   "entries": []
 }
 ```
+
+`distribution` is an additive v1 field set by `sb-models publish` (`docs/publishing-interface-v1.md`). Its absence, under the schema_version 1 compatibility rule below, means the catalog was built but not yet published, or was published by tooling that predates this field; the client MUST NOT reject an otherwise-valid catalog for lacking it.
 
 Each installable entry binds repository metadata and evaluation results to exact, schema-validated model and runtime snapshots. The complete nested shapes are defined by `manifest-v1.schema.json` and `runtime-v1.schema.json`:
 
@@ -139,11 +145,22 @@ Each installable entry binds repository metadata and evaluation results to exact
       }
     ]
   },
+  "assets": {
+    "artifact_url": "https://github.com/<owner>/<repo>/releases/download/catalog-stable-v14/models-sha256-<model-artifact-digest>-model.gguf",
+    "license_url": "https://github.com/<owner>/<repo>/releases/download/catalog-stable-v14/licenses-<model-license-digest>-LICENSE",
+    "runtime_license_url": "https://github.com/<owner>/<repo>/releases/download/catalog-stable-v14/licenses-<runtime-license-digest>-LICENSE",
+    "result_url": "https://github.com/<owner>/<repo>/releases/download/catalog-stable-v14/results-<model-artifact-digest>-result.json",
+    "runtime_package_urls": {
+      "windows-x86_64": "https://github.com/<owner>/<repo>/releases/download/catalog-stable-v14/runtimes-sha256-<runtime-package-digest>-<platform-package>"
+    }
+  },
   "revocation": null
 }
 ```
 
 The abbreviated nested objects above illustrate the immutable download fields; actual catalog entries MUST contain every field required by their schemas. Each model and runtime license is committed adjacent to its manifest, then bound to one public `licenses/<sha256>/LICENSE` object by repository path, SHA-256, and byte size. External quality scores are exact decimal strings, not floating-point JSON values. Hardware fields are publisher claims, not measurements by this project. The UI MUST label them accordingly.
+
+`assets` is an additive v1 field, also set by `sb-models publish`, carrying the exact download URL this project already verified for every object this entry references on the catalog's current `distribution.host`. When present, the client SHOULD use these URLs directly rather than deriving a download location from a separately configured base host: they are correct regardless of whether the current host is the interim `github-release` or the eventual production `r2`, and the flattened GitHub Releases filenames (`<flattened-repository-path>`, `/` replaced with `-`) are otherwise not guessable from the manifest alone. Its absence means the same compatibility fallback as `distribution`. Every URL, `assets` or otherwise, still MUST be validated against the [artifact download and verification](#artifact-download-and-verification) rules below -- an `assets` URL is a location, never a substitute for verifying SHA-256 and size against the signed manifest.
 
 The evaluation result records resource-tier-calibrated `eligible_task_contracts`, and the approved manifest may list only a human-reviewed subset. The resource tier is derived from the exact artifact byte size; it is metadata, not a hardware guarantee. These fields communicate tested suitability and may inform defaults. Suggested and approved task labels MUST NOT override the user's model selection or grant tool, write, communication, scheduling, or other host authority.
 
@@ -178,6 +195,8 @@ The client MUST:
 - Never execute or import artifact-provided code.
 - Verify and retain the exact model and runtime license bytes before installation; never substitute license text fetched outside the signed catalog.
 - Leave the currently active model unchanged after a failed or canceled installation.
+
+While the current `distribution.host` is the interim `github-release` (see [Catalog envelope](#catalog-envelope)), a download URL is a `github.com/<owner>/<repo>/releases/download/<release>/<flattened-name>` URL rather than a `models.avnxmcp.org` path, and GitHub's own CDN redirect for a release asset is part of that configured origin for this mode; the content-addressed digest agreement above is enforced by verifying the downloaded bytes' SHA-256 against the manifest digest, since the flattened GitHub Releases filename does not itself carry the `/sha256/<digest>/` path segment. This changes only which origin is configured and how the digest agreement is checked, never the requirement that every downloaded byte is verified against the exact signed manifest value before installation.
 
 R2 ETags are not a substitute for the signed SHA-256 value, especially for multipart uploads.
 

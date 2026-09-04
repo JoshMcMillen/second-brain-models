@@ -12,6 +12,7 @@ from .discovery import discover
 from .errors import ModelCatalogError
 from .evaluation import evaluate_predictions
 from .jsonio import load_json, write_canonical
+from .hosting import SUPPORTED_HOSTS
 from .lifecycle import build_catalog, create_revocation
 from .noegress import collect_no_egress_evidence, merge_no_egress_evidence, probe_no_egress
 from .network_monitor import check_strace_logs
@@ -176,6 +177,29 @@ def _parser() -> argparse.ArgumentParser:
     catalog.add_argument("--public-key", required=True, type=_path)
     catalog.add_argument("--expires-days", type=int, default=7)
 
+    publish = commands.add_parser(
+        "publish",
+        help="build, sign, upload, verify, and publish one catalog release through a pluggable asset host",
+    )
+    publish.add_argument("--repo-root", type=_path, default=Path.cwd())
+    publish.add_argument(
+        "--staging-root", required=True, type=_path,
+        help="directory holding verified model/runtime-package bytes at their models/sha256/... and "
+        "runtimes/sha256/... paths; never the Git checkout, since those bytes are never committed",
+    )
+    publish.add_argument("--channel", required=True, choices=("beta", "stable", "revoked"))
+    publish.add_argument("--catalog-version", required=True, type=int)
+    publish.add_argument("--expires-days", type=int, default=7)
+    publish.add_argument("--public-key", required=True, type=_path)
+    publish_keys = publish.add_mutually_exclusive_group(required=True)
+    publish_keys.add_argument("--private-key", type=_path)
+    publish_keys.add_argument("--key-env")
+    publish.add_argument("--host", default="github-release", choices=SUPPORTED_HOSTS)
+    publish.add_argument("--repository", required=True, help="owner/name of the GitHub repository hosting releases")
+    publish.add_argument("--catalog-output", required=True, type=_path)
+    publish.add_argument("--signature-output", required=True, type=_path)
+    publish.add_argument("--receipt", type=_path)
+
     revoke = commands.add_parser("revoke", help="create one reviewed revocation record")
     revoke.add_argument("--repo-root", type=_path, default=Path.cwd())
     revoke.add_argument("--manifest", required=True, type=_path)
@@ -291,6 +315,29 @@ def run(argv: list[str] | None = None) -> int:
             catalog_version=args.catalog_version, key_id=key_id, expires_days=args.expires_days,
         )
         _print({"status": "pass", "entries": len(catalog["entries"]), "key_id": key_id})
+    elif args.command == "publish":
+        if args.host != "github-release":
+            raise ModelCatalogError(
+                f"host {args.host!r} is not implemented yet; only github-release publishes today"
+            )
+        from .publishing import GhCliReleaseTransport, publish_release
+
+        key = load_private_key(args.private_key) if args.private_key else private_key_from_env(args.key_env)
+        public_key = load_public_key(args.public_key)
+        receipt = publish_release(
+            repo_root=args.repo_root, staging_root=args.staging_root,
+            channel=args.channel, catalog_version=args.catalog_version,
+            private_key=key, public_key=public_key, public_key_path=args.public_key,
+            repository=args.repository, host=args.host, transport=GhCliReleaseTransport(),
+            catalog_output_path=args.catalog_output, signature_output_path=args.signature_output,
+            expires_days=args.expires_days, receipt_path=args.receipt,
+        )
+        _print({
+            "status": "pass",
+            "release": receipt["release"],
+            "objects": len(receipt["objects"]),
+            "key_id": receipt["key_id"],
+        })
     elif args.command == "revoke":
         _print(create_revocation(
             repo_root=args.repo_root, manifest_path=args.manifest, reason_code=args.reason_code,

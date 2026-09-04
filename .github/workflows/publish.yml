@@ -25,10 +25,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment: model-publish
+    permissions:
+      contents: write
     env:
       INPUT_CHANNEL: ${{ inputs.channel }}
       INPUT_CATALOG_VERSION: ${{ inputs.catalog_version }}
       DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+      GH_REPOSITORY: ${{ github.repository }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -40,18 +43,39 @@ jobs:
           python-version: "3.13"
           cache: pip
       - run: python -m pip install .
-      - name: Validate and build reviewed catalog
-        env:
-          CATALOG_SIGNING_KEY_B64: ${{ secrets.CATALOG_SIGNING_KEY_B64 }}
+      - name: Validate reviewed repository state
         run: |
           test -s keys/public/catalog-release-v1.pem
           sb-models repo-check --repo-root .
-          mkdir -p catalog
-          sb-models build-catalog --repo-root . --channel "$INPUT_CHANNEL" --catalog-version "$INPUT_CATALOG_VERSION" --public-key keys/public/catalog-release-v1.pem --output "catalog/$INPUT_CHANNEL.json"
-          sb-models sign --document "catalog/$INPUT_CHANNEL.json" --signature "catalog/$INPUT_CHANNEL.json.sig" --key-env CATALOG_SIGNING_KEY_B64
-          sb-models verify --document "catalog/$INPUT_CHANNEL.json" --signature "catalog/$INPUT_CHANNEL.json.sig" --public-key keys/public/catalog-release-v1.pem
-      - name: Publication disabled until artifact-first R2 receipt is implemented
+      - name: Materialize staged objects this release will upload
         run: |
-          echo "FAIL CLOSED: Git catalog state will not change until the workflow uploads every referenced model/runtime/license/result object to the release bucket, downloads each public object again, and verifies its signed path, byte size, and SHA-256." >&2
-          echo "See docs/publishing-interface-v1.md." >&2
-          exit 1
+          mkdir -p staging catalog
+          # beta/stable staging (real model/runtime bytes from the private R2
+          # candidate bucket) is not implemented yet; see docs/cloudflare-setup.md.
+          # It is a no-op today because no manifest is currently approved for
+          # either channel, so build-catalog produces zero entries for them.
+      - name: Build, sign, upload, verify, and publish this catalog release
+        env:
+          CATALOG_SIGNING_KEY_B64: ${{ secrets.CATALOG_SIGNING_KEY_B64 }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          sb-models publish \
+            --repo-root . \
+            --staging-root staging \
+            --channel "$INPUT_CHANNEL" \
+            --catalog-version "$INPUT_CATALOG_VERSION" \
+            --public-key keys/public/catalog-release-v1.pem \
+            --key-env CATALOG_SIGNING_KEY_B64 \
+            --host github-release \
+            --repository "$GH_REPOSITORY" \
+            --catalog-output "catalog/$INPUT_CHANNEL.json" \
+            --signature-output "catalog/$INPUT_CHANNEL.json.sig" \
+            --receipt release-receipt.json
+      - name: Retain the release receipt as a workflow artifact
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: catalog-publish-receipt-${{ github.run_id }}
+          path: release-receipt.json
+          if-no-files-found: warn
+          retention-days: 90
