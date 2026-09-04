@@ -1,0 +1,95 @@
+name: Model candidate proposal
+description: Propose one exact model artifact for candidate review. This does not add or approve anything by itself.
+title: "[candidate] "
+labels: ["candidate"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This project only reviews one exact artifact at a time from an
+        already-allowlisted publisher (`policy/upstream-allowlist.yaml`). If
+        the publisher is not already listed there, say so below; adding a
+        publisher is itself an owner decision, separate from this candidate.
+        See `README.md` and `docs/promotion-policy.md` before filing.
+  - type: input
+    id: publisher
+    attributes:
+      label: Official publisher
+      description: The exact publisher identity (e.g. the Hugging Face org, or the GitHub org/user), not a mirror or reupload.
+      placeholder: "e.g. Qwen"
+    validations:
+      required: true
+  - type: input
+    id: upstream_repository
+    attributes:
+      label: Upstream repository
+      description: host/namespace/repository, matching an allowed_publishers pattern in policy/upstream-allowlist.yaml.
+      placeholder: "huggingface.co/Qwen/Qwen3-4B-GGUF"
+    validations:
+      required: true
+  - type: input
+    id: upstream_revision
+    attributes:
+      label: Immutable upstream revision
+      description: An exact commit or content revision, never a moving branch or tag.
+      placeholder: "bc640142c66e1fdd12af0bd68f40445458f3869b"
+    validations:
+      required: true
+  - type: input
+    id: artifact_url
+    attributes:
+      label: Exact artifact URL
+      description: The one file this candidate is about, at the exact revision above.
+      placeholder: "https://huggingface.co/Qwen/Qwen3-4B-GGUF/blob/<revision>/Qwen3-4B-Q4_K_M.gguf"
+    validations:
+      required: true
+  - type: input
+    id: sha256
+    attributes:
+      label: Exact artifact SHA-256
+      description: Lowercase 64-hex digest of the exact file above.
+      placeholder: "7485fe6f11af29433bc51cab58009521f205840f5b4ae3a32fa7f92e8534fdf5"
+    validations:
+      required: true
+  - type: input
+    id: size_bytes
+    attributes:
+      label: Exact artifact size in bytes
+      placeholder: "2497280256"
+    validations:
+      required: true
+  - type: input
+    id: license
+    attributes:
+      label: License
+      description: SPDX identifier if one applies, and where the exact LICENSE/NOTICE text for this revision lives upstream.
+      placeholder: "Apache-2.0, https://huggingface.co/Qwen/Qwen3-4B-GGUF/raw/<revision>/LICENSE"
+    validations:
+      required: true
+  - type: dropdown
+    id: intended_tier
+    attributes:
+      label: Intended resource tier
+      description: Derived from the exact artifact's decimal byte size (docs/promotion-policy.md); this is a claim to be verified, not a request to override it.
+      options:
+        - "lite (under 2,000,000,000 bytes)"
+        - "standard (2,000,000,000 to under 6,000,000,000 bytes)"
+        - "plus (6,000,000,000 bytes or more)"
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why this candidate
+      description: What task(s) it might serve, any published quality evidence you know of (exact-artifact, parent-model, or family coverage), and anything else review should weigh.
+    validations:
+      required: true
+  - type: checkboxes
+    id: acknowledgements
+    attributes:
+      label: Before submitting
+      options:
+        - label: I am not attaching or linking model weights, an archive, or executable content to this issue.
+          required: true
+        - label: I understand this is a proposal for review, not an approval, and that redistribution/license terms will be checked independently.
+          required: true
