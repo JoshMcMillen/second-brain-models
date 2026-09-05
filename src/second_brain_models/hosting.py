@@ -42,10 +42,16 @@ def asset_filename(repository_relative_path: str) -> str:
     """Flatten a repository-relative path into one unique flat release-asset name.
 
     GitHub release assets share one flat namespace per release and forbid path
-    separators in asset names. The flattening is deterministic and lossless for
-    every path this repository produces (content-addressed by SHA-256, or a
-    committed schema/fixture path), because distinct repository-relative paths
-    never collide once their separators are replaced.
+    separators in asset names. The flattening (replacing every ``/`` with
+    ``-``) is deterministic and, in practice, collision-free for every path
+    shape this repository actually produces (content-addressed by SHA-256, or
+    a committed schema/fixture path) -- but it is not injective in general:
+    two different repository-relative paths that differ only in where a ``/``
+    falls relative to a literal ``-`` can flatten to the same name (e.g.
+    ``a/b-c`` and ``a-b/c`` both flatten to ``a-b-c``). Callers that assemble
+    a release from more than one path (see
+    ``second_brain_models.publishing.plan_release``) must check for that
+    themselves before relying on this being unique.
     """
     if not isinstance(repository_relative_path, str) or not repository_relative_path:
         raise ModelCatalogError(f"unsafe repository-relative asset path: {repository_relative_path!r}")

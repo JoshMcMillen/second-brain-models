@@ -22,10 +22,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import hashlib
+import os
 from pathlib import Path
 import subprocess
 import tempfile
-from typing import Any, Protocol
+from typing import Any, Iterable, Protocol
 
 from .errors import ModelCatalogError
 from .hosting import asset_filename, release_name, resolve_asset_url
@@ -177,6 +178,50 @@ def _asset(
     return ReleaseAsset(repo_path=identity, source_path=source, sha256=digest, size_bytes=size)
 
 
+def _ensure_no_filename_collisions(assets: Iterable[ReleaseAsset]) -> None:
+    """Fail fast if two distinct repository paths would flatten to one filename.
+
+    ``hosting.asset_filename`` is deterministic and collision-free for every
+    path shape this repository actually produces, but it is not injective in
+    general (see its docstring): two different repository-relative paths can
+    share a flattened name. This is the guard against that ever silently
+    letting one release asset overwrite another; it runs as part of
+    ``plan_release``, before ``publish_release`` signs anything or uploads a
+    single byte.
+    """
+    seen: dict[str, str] = {}
+    for asset in assets:
+        filename = asset.filename
+        existing = seen.get(filename)
+        if existing is not None and existing != asset.repo_path:
+            raise ModelCatalogError(
+                f"two repository paths flatten to the same release asset filename "
+                f"{filename!r}: {existing!r} and {asset.repo_path!r}"
+            )
+        seen[filename] = asset.repo_path
+
+
+def _workflow_run_reference() -> dict[str, str] | None:
+    """The workflow run producing this receipt, from GitHub Actions' own env.
+
+    ``GITHUB_RUN_ID``, ``GITHUB_SERVER_URL``, and ``GITHUB_REPOSITORY`` are
+    set by default in every Actions job step; ``docs/publishing-interface-v1.md``
+    requires the release receipt to name the workflow run. Returns ``None``
+    (never a partial reference) unless all three are present -- e.g. when
+    ``sb-models publish`` runs outside of a workflow, such as in tests or a
+    local dry run.
+    """
+    run_id = os.environ.get("GITHUB_RUN_ID")
+    server_url = os.environ.get("GITHUB_SERVER_URL")
+    repository_slug = os.environ.get("GITHUB_REPOSITORY")
+    if not run_id or not server_url or not repository_slug:
+        return None
+    return {
+        "run_id": run_id,
+        "url": f"{server_url}/{repository_slug}/actions/runs/{run_id}",
+    }
+
+
 @dataclass(frozen=True)
 class ReleasePlan:
     release: str
@@ -265,6 +310,8 @@ def plan_release(
     # when the catalog itself is empty (see contract_fixture_assets()).
     for asset in contract_fixture_assets(root):
         registry.setdefault(asset.repo_path, asset)
+
+    _ensure_no_filename_collisions(registry.values())
 
     new_catalog = dict(catalog)
     new_catalog["entries"] = new_entries
@@ -374,8 +421,20 @@ def publish_release(
                     raise ModelCatalogError(f"re-download verification failed for {filename}")
 
             transport.publish_release(repository=repository, release=plan.release)
-        except Exception:
-            transport.delete_release(repository=repository, release=plan.release)
+        except Exception as original_exc:
+            # Draft cleanup is best-effort: the original failure is why
+            # publish is failing closed, and it must keep propagating even
+            # if we cannot also remove the draft release. Record the cleanup
+            # failure on the original exception instead of raising it in
+            # place of the real cause.
+            try:
+                transport.delete_release(repository=repository, release=plan.release)
+            except Exception as cleanup_exc:
+                original_exc.add_note(
+                    f"cleanup also failed: could not delete draft release {plan.release!r} "
+                    f"after the publish failure above ({cleanup_exc!r}); it may still exist "
+                    "in draft state on the host and require manual deletion"
+                )
             raise
 
         receipt: dict[str, Any] = {
@@ -385,6 +444,7 @@ def publish_release(
             "release": plan.release,
             "host": host,
             "repository": repository,
+            "workflow_run": _workflow_run_reference(),
             "key_id": key_id,
             "catalog_sha256": hashlib.sha256(catalog_bytes).hexdigest(),
             "objects": uploaded,
