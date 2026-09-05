@@ -113,7 +113,7 @@ def build_catalog(
                 continue
             if not promotion.get("review_reference"):
                 raise PolicyError(f"published manifest lacks review_reference: {manifest_path}")
-            if not promotion["approved_task_contracts"]:
+            if channel != "test" and not promotion["approved_task_contracts"]:
                 raise PolicyError(f"published manifest approves no task contracts: {manifest_path}")
         if channel == "stable" and (
             beta_history is None
