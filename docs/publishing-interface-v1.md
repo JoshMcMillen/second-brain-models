@@ -13,9 +13,9 @@ Signing a catalog is not publication by itself. `publish.yml` used to be intenti
 5. Only after every object verifies does the workflow attach the signed catalog JSON, its detached signature, and the public key to the same release and move it out of draft. Immutable once published: nothing about a published release's assets is rewritten afterward.
 6. Any verification failure deletes the draft release and the workflow exits nonzero; the previously published catalog for that channel remains the latest live state.
 
-The release receipt (`--receipt`) is canonical JSON naming the workflow run, channel, catalog version, release name, host, and repository, and listing every uploaded object's repository path, asset filename, URL, SHA-256, size, and verification result. It is retained as a workflow artifact.
+The release receipt (`--receipt`) is canonical JSON naming the workflow run, channel, catalog version, release name, host, and repository, and listing every *referenced* object's repository path, asset filename, URL, SHA-256, size, and verification result -- models, runtimes, licenses, and results from catalog entries, plus the schemas/fixtures-signing contract fixtures that ride along on every release (`contract_fixture_assets()`). The catalog JSON itself, its detached signature, and the public key are uploaded and byte-verified the same way but are never part of this list; the receipt covers the catalog's own bytes separately, in `catalog_sha256`. The receipt is retained as a workflow artifact.
 
-For an empty catalog (no approved manifest for that channel yet), the referenced-object list is empty; publication still attaches the catalog, its signature, and the public key, so the channel's signed-but-empty catalog is real and independently verifiable from day one.
+For an empty catalog (no approved manifest for that channel yet), the referenced-object list is never empty: it still contains the contract fixtures that every release attaches, even though there are no model/runtime/license/result entries. Publication still attaches the catalog, its signature, and the public key, so the channel's signed-but-empty catalog is real and independently verifiable from day one.
 
 ## Production host: Cloudflare R2 (documented, not implemented)
 
