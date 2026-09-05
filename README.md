@@ -15,7 +15,7 @@ The v1 goal is deliberately small:
 7. Require an owner decision before publishing it as beta or stable.
 8. Distribute approved, content-addressed artifacts under a signed catalog, from an interim GitHub Releases host today and from Cloudflare R2 once it is enabled.
 
-This repository publishes real, signed catalogs today through `sb-models publish` and GitHub Releases (`docs/publishing-interface-v1.md`), but no production signing key exists yet (`docs/signing-runbook.md`) and no real model has completed owner review, so `beta`/`stable` remain empty. Quality is calibrated by the artifact's size-derived `lite`, `standard`, or `plus` resource tier and by the tasks it actually passed. Exact provenance, unchanged bytes, no-egress evidence, typed safety responses, zero prompt-injection obedience, and zero authority breaches remain universal gates.
+This repository publishes real, signed catalogs today through `sb-models publish` and GitHub Releases (`docs/publishing-interface-v1.md`), but no production signing key exists yet (`docs/signing-runbook.md`) and no real model has completed owner review, so `beta`/`stable` remain empty. The dedicated `test` channel's contract -- schema, policy, and `sb-models build-canary` -- is in place, so Second Brain will be able to exercise fetch, verify, download, and install end to end against one permanently-fixed, non-model canary fixture; the fixture itself under `fixtures/test-channel/second-brain-install-canary/` follows in the next pull request. Until it lands, `publish.yml` fails closed if the `test` channel is dispatched. Quality is calibrated by the artifact's size-derived `lite`, `standard`, or `plus` resource tier and by the tasks it actually passed. Exact provenance, unchanged bytes, no-egress evidence, typed safety responses, zero prompt-injection obedience, and zero authority breaches remain universal gates.
 
 Current candidate evidence:
 
@@ -56,7 +56,7 @@ Cloudflare stores and delivers public software artifacts. It is not in the infer
 - Each catalog is signed with one Ed25519 release key stored in a protected GitHub publishing environment.
 - Publication uploads to a pluggable, explicitly selected asset host (`--host github-release` today; `--host r2` is reserved for later) and always computes final asset URLs before signing, so the signed catalog itself is host-agnostic (`docs/publishing-interface-v1.md`).
 - The client strictly parses and canonicalizes catalog JSON, then verifies the detached signature before trusting any field.
-- Beta, stable, and revoked are explicit signed catalog states.
+- Beta, stable, revoked, and test are explicit signed catalog states; test is a dedicated, non-model connectivity channel outside the promotion ladder.
 - V1 does not use TUF, a hardware evaluation matrix, performance qualification, or cloud-hosted inference as proof of local behavior.
 - Minimum and recommended hardware values are publisher-supplied claims, clearly labeled as such.
 - Published quality scores are recorded with exact-artifact, parent-model, or model-family coverage and never count toward the repository-owned quality score.
@@ -84,7 +84,9 @@ runtimes/<runtime-family>-<version>/
 evals/                          small versioned quality fixtures
 results/<artifact-sha256>/result.json
                                  summarized exact-artifact result
-catalog/                        signed beta, stable, and revoked catalogs
+catalog/                        signed beta, stable, revoked, and test catalogs
+fixtures/test-channel/          the one non-model verify-install canary fixture
+fixtures/signing/               public fixture key, fixture catalog/signature, and invalid fixtures
 .github/workflows/              discovery, checks, publishing, revocation
 ```
 

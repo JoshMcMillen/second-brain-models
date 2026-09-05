@@ -40,6 +40,15 @@ allowed_publishers:
     namespace: google
     repository_pattern: "^huggingface\\.co/google/[A-Za-z0-9][A-Za-z0-9._-]*$"
     decision: candidate_review_only
+  # Scope: this repository's own maintainers, publishing only the tiny,
+  # synthetic, non-model canary fixture under fixtures/test-channel/ (see
+  # fixtures/test-channel/second-brain-install-canary/SOURCE.md). It never
+  # admits a real model.
+  - publisher_id: second-brain-models-fixtures
+    host: github.com
+    namespace: JoshMcMillen
+    repository_pattern: "^github\\.com/JoshMcMillen/second-brain-models$"
+    decision: candidate_review_only
 
 candidate_gates:
   exact_repository_match_required: true

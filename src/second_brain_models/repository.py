@@ -51,7 +51,7 @@ def check_repository(repo_root: Path | str) -> dict[str, Any]:
                     raise DocumentError(f"symlinks are forbidden in repository trust data: {path.relative_to(root)}")
     validate_schema_set(root)
     load_policy_bundle(root)
-    counts = {"manifest": 0, "runtime": 0, "result": 0, "catalog": 0, "revocation": 0}
+    counts = {"manifest": 0, "test_channel_manifest": 0, "runtime": 0, "result": 0, "catalog": 0, "revocation": 0}
     groups = (
         ("result", ("results/*/*.json",)),
         ("catalog", ("catalog/*.json",)),
@@ -86,6 +86,16 @@ def check_repository(repo_root: Path | str) -> dict[str, Any]:
         validate_license_binding(path, value["license"], root)
         validate_model_runtime_reference(value, root, require_approved=False)
         counts["manifest"] += 1
+    test_channel_paths = sorted(root.glob("fixtures/test-channel/*/manifest.json"))
+    for path in test_channel_paths:
+        value = validate_file(path, "manifest", root)
+        if path.parent.name != value["model_id"]:
+            raise DocumentError(f"test-channel fixture directory must equal model_id: {path.relative_to(root)}")
+        if value["promotion"]["channel"] != "test":
+            raise DocumentError(f"fixtures/test-channel manifest must declare promotion.channel test: {path.relative_to(root)}")
+        validate_license_binding(path, value["license"], root)
+        validate_model_runtime_reference(value, root, require_approved=False)
+        counts["test_channel_manifest"] += 1
     forbidden_roots = [root / "artifacts", root / "downloads", root / "staging"]
     if any(path.exists() for path in forbidden_roots):
         raise DocumentError("candidate/model bytes must not be stored in the Git repository")

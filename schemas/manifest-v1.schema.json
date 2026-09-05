@@ -286,7 +286,7 @@
         },
         "repository_path": {
           "type": "string",
-          "pattern": "^models/[a-z0-9][a-z0-9._-]*/LICENSE$"
+          "pattern": "^(?:models|fixtures/test-channel)/[a-z0-9][a-z0-9._-]*/LICENSE$"
         },
         "path": {
           "type": "string",
@@ -571,7 +571,8 @@
           "enum": [
             "candidate",
             "beta",
-            "stable"
+            "stable",
+            "test"
           ]
         },
         "status": {
@@ -628,6 +629,25 @@
             "properties": {
               "approved_task_contracts": {
                 "minItems": 1
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "channel": {
+                "const": "test"
+              }
+            },
+            "required": [
+              "channel"
+            ]
+          },
+          "then": {
+            "properties": {
+              "approved_task_contracts": {
+                "maxItems": 0
               }
             }
           }

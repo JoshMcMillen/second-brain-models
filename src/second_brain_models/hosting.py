@@ -23,7 +23,7 @@ SUPPORTED_HOSTS = ("github-release", "r2")
 
 _OWNER_REPO = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?/[A-Za-z0-9._-]+$")
 _RELEASE_NAME = re.compile(r"^[a-z0-9][a-z0-9.-]{0,127}$")
-_CHANNELS = ("beta", "stable", "revoked")
+_CHANNELS = ("beta", "stable", "revoked", "test")
 
 
 def release_name(channel: str, catalog_version: int) -> str:

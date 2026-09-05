@@ -71,8 +71,8 @@ def build_catalog(
 ) -> dict[str, Any]:
     root = Path(repo_root).resolve()
     load_policy_bundle(root)
-    if channel not in {"beta", "stable", "revoked"}:
-        raise PolicyError("catalog channel must be beta, stable, or revoked")
+    if channel not in {"beta", "stable", "revoked", "test"}:
+        raise PolicyError("catalog channel must be beta, stable, revoked, or test")
     if catalog_version < 1 or expires_days < 1 or expires_days > 30:
         raise PolicyError("catalog_version and expiration must be bounded positive values")
     current_catalog_path = root / "catalog" / f"{channel}.json"
@@ -93,8 +93,22 @@ def build_catalog(
         revocations[record["artifact_sha256"]] = record
 
     entries: list[dict[str, Any]] = []
-    manifest_root = root / "models"
-    for manifest_path in sorted(manifest_root.glob("*/manifest.json")) if manifest_root.is_dir() else []:
+    # The dedicated "test" channel serves one small, permanently-fixed,
+    # non-model connectivity fixture (see
+    # fixtures/test-channel/second-brain-install-canary/) so
+    # Second Brain can exercise verify/download/install without a real
+    # model. It lives outside models/ and outside the candidate->beta->
+    # stable promotion ladder, but is otherwise validated identically.
+    manifest_root = root / ("fixtures/test-channel" if channel == "test" else "models")
+    manifest_paths = sorted(manifest_root.glob("*/manifest.json")) if manifest_root.is_dir() else []
+    if channel == "test":
+        expected_path = manifest_root / "second-brain-install-canary" / "manifest.json"
+        if manifest_paths != [expected_path]:
+            raise PolicyError(
+                "test catalog requires exactly "
+                "fixtures/test-channel/second-brain-install-canary/manifest.json"
+            )
+    for manifest_path in manifest_paths:
         manifest = validate_file(manifest_path, "manifest", root)
         promotion = manifest["promotion"]
         artifact_digest = manifest["artifact"]["sha256"]
@@ -107,7 +121,9 @@ def build_catalog(
                 continue
             if not promotion.get("review_reference"):
                 raise PolicyError(f"published manifest lacks review_reference: {manifest_path}")
-            if not promotion["approved_task_contracts"]:
+            if channel == "test" and promotion["approved_task_contracts"]:
+                raise PolicyError(f"test manifest grants task contracts: {manifest_path}")
+            if channel != "test" and not promotion["approved_task_contracts"]:
                 raise PolicyError(f"published manifest approves no task contracts: {manifest_path}")
         if channel == "stable" and (
             beta_history is None
@@ -119,7 +135,13 @@ def build_catalog(
         ):
             raise PolicyError("stable promotion requires the exact model artifact to appear as installable in catalog/beta.json")
         validate_license_binding(manifest_path, manifest["license"], root)
-        exact_runtime = validate_model_runtime_reference(manifest, root, require_approved=channel != "revoked")
+        # The test-channel fixture is a permanent, self-attested connectivity
+        # canary rather than a promoted model, so it does not require the
+        # runtime family itself to have completed the separate, owner-gated
+        # runtime approval lifecycle that beta/stable promotion requires.
+        exact_runtime = validate_model_runtime_reference(
+            manifest, root, require_approved=channel not in ("revoked", "test"),
+        )
         if not set(promotion["approved_task_contracts"]) <= set(manifest["evaluation"]["task_contracts"]):
             raise PolicyError(f"manifest grants a task contract that was not evaluated: {manifest_path}")
         result_path = root / manifest["evaluation"]["result_path"]

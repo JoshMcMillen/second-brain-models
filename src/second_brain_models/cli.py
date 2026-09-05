@@ -172,7 +172,7 @@ def _parser() -> argparse.ArgumentParser:
     catalog = commands.add_parser("build-catalog", help="assemble a reviewed beta/stable catalog")
     catalog.add_argument("--repo-root", type=_path, default=Path.cwd())
     catalog.add_argument("--output", required=True, type=_path)
-    catalog.add_argument("--channel", required=True, choices=("beta", "stable", "revoked"))
+    catalog.add_argument("--channel", required=True, choices=("beta", "stable", "revoked", "test"))
     catalog.add_argument("--catalog-version", required=True, type=int)
     catalog.add_argument("--public-key", required=True, type=_path)
     catalog.add_argument("--expires-days", type=int, default=7)
@@ -187,7 +187,7 @@ def _parser() -> argparse.ArgumentParser:
         help="directory holding verified model/runtime-package bytes at their models/sha256/... and "
         "runtimes/sha256/... paths; never the Git checkout, since those bytes are never committed",
     )
-    publish.add_argument("--channel", required=True, choices=("beta", "stable", "revoked"))
+    publish.add_argument("--channel", required=True, choices=("beta", "stable", "revoked", "test"))
     publish.add_argument("--catalog-version", required=True, type=int)
     publish.add_argument("--expires-days", type=int, default=7)
     publish.add_argument("--public-key", required=True, type=_path)
@@ -199,6 +199,13 @@ def _parser() -> argparse.ArgumentParser:
     publish.add_argument("--catalog-output", required=True, type=_path)
     publish.add_argument("--signature-output", required=True, type=_path)
     publish.add_argument("--receipt", type=_path)
+
+    build_canary = commands.add_parser(
+        "build-canary",
+        help="materialize the deterministic fixtures/test-channel canary bytes at its exact staging path",
+    )
+    build_canary.add_argument("--repo-root", type=_path, default=Path.cwd())
+    build_canary.add_argument("--staging-root", required=True, type=_path)
 
     revoke = commands.add_parser("revoke", help="create one reviewed revocation record")
     revoke.add_argument("--repo-root", type=_path, default=Path.cwd())
@@ -338,6 +345,31 @@ def run(argv: list[str] | None = None) -> int:
             "objects": len(receipt["objects"]),
             "key_id": receipt["key_id"],
         })
+    elif args.command == "build-canary":
+        import hashlib
+
+        from .canary import build_canary_artifact_bytes
+
+        manifest_path = args.repo_root / "fixtures" / "test-channel" / "second-brain-install-canary" / "manifest.json"
+        if not manifest_path.is_file():
+            raise ModelCatalogError(
+                f"the test-channel canary fixture manifest is missing: {manifest_path}; "
+                "sb-models build-canary requires "
+                "fixtures/test-channel/second-brain-install-canary/manifest.json, which this "
+                "contract-only change does not commit -- it is expected to appear in the "
+                "dedicated canary-fixture pull request that follows this one"
+            )
+        manifest = load_json(manifest_path)
+        raw = build_canary_artifact_bytes()
+        digest = hashlib.sha256(raw).hexdigest()
+        if digest != manifest["artifact"]["sha256"]:
+            raise ModelCatalogError(
+                "rebuilt canary bytes do not match the committed fixture manifest digest"
+            )
+        target = args.staging_root / "models" / "sha256" / digest / "model.gguf"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(raw)
+        _print({"status": "pass", "sha256": digest, "size_bytes": len(raw), "path": str(target)})
     elif args.command == "revoke":
         _print(create_revocation(
             repo_root=args.repo_root, manifest_path=args.manifest, reason_code=args.reason_code,

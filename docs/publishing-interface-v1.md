@@ -23,7 +23,7 @@ For an empty catalog (no approved manifest for that channel yet), the referenced
 
 ## Revocation
 
-`revoke.yml` still exits nonzero after signing a revocation record and rebuilding `catalog/revoked.json`: it has no upload/verify path of its own yet. The same `sb-models publish --channel revoked ...` flow used for `beta`/`stable` is the natural next step, gated on the same protected `model-publish` environment; it is not wired into `revoke.yml` in this change.
+`revoke.yml` still exits nonzero after signing a revocation record and rebuilding `catalog/revoked.json`: it has no upload/verify path of its own yet. The same `sb-models publish --channel revoked ...` flow used for `beta`/`stable`/`test` is the natural next step, gated on the same protected `model-publish` environment; it is not wired into `revoke.yml` in this change.
 
 `evaluate.yml` implements the separate evaluation boundary. A protected manual run downloads the manifest-pinned public upstream model and Linux runtime package, verifies exact size and SHA-256, performs static checks and guarded extraction, and then starts the runtime under `strace` inside one new network/PID/mount namespace. The runtime executes as `nobody` with capabilities removed, a scrubbed environment, bounded OS resources, CPU-only/offline flags, and only a `127.0.0.1` endpoint. The trusted probe and 30-case client run in that same namespace.
 
