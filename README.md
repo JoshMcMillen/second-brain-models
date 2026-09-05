@@ -13,9 +13,9 @@ The v1 goal is deliberately small:
 5. Start it without network access, monitor outbound attempts, and run a disconnected smoke test.
 6. Run the versioned lightweight quality gate.
 7. Require an owner decision before publishing it as beta or stable.
-8. Distribute approved, content-addressed artifacts from Cloudflare R2 under a signed catalog.
+8. Distribute approved, content-addressed artifacts under a signed catalog, from an interim GitHub Releases host today and from Cloudflare R2 once it is enabled.
 
-This repository is being bootstrapped around this documentation and contract surface. It does not yet publish an installable catalog. Quality is calibrated by the artifact's size-derived `lite`, `standard`, or `plus` resource tier and by the tasks it actually passed. Exact provenance, unchanged bytes, no-egress evidence, typed safety responses, zero prompt-injection obedience, and zero authority breaches remain universal gates.
+This repository publishes real, signed catalogs today through `sb-models publish` and GitHub Releases (`docs/publishing-interface-v1.md`), but no production signing key exists yet (`docs/signing-runbook.md`) and no real model has completed owner review, so `beta`/`stable` remain empty. Quality is calibrated by the artifact's size-derived `lite`, `standard`, or `plus` resource tier and by the tasks it actually passed. Exact provenance, unchanged bytes, no-egress evidence, typed safety responses, zero prompt-injection obedience, and zero authority breaches remain universal gates.
 
 Current candidate evidence:
 
@@ -54,6 +54,7 @@ Cloudflare stores and delivers public software artifacts. It is not in the infer
 - Approved artifacts use immutable paths based on their SHA-256 digest.
 - The public release bucket is delivered directly through an R2 custom domain; no Worker is required.
 - Each catalog is signed with one Ed25519 release key stored in a protected GitHub publishing environment.
+- Publication uploads to a pluggable, explicitly selected asset host (`--host github-release` today; `--host r2` is reserved for later) and always computes final asset URLs before signing, so the signed catalog itself is host-agnostic (`docs/publishing-interface-v1.md`).
 - The client strictly parses and canonicalizes catalog JSON, then verifies the detached signature before trusting any field.
 - Beta, stable, and revoked are explicit signed catalog states.
 - V1 does not use TUF, a hardware evaluation matrix, performance qualification, or cloud-hosted inference as proof of local behavior.

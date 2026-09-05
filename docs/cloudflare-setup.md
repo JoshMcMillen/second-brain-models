@@ -13,7 +13,9 @@ No Worker, Pages project, D1 database, Queue, Durable Object, AI Gateway, Worker
 
 ## Bootstrap status (2026-09-01)
 
-Wrangler is authenticated to the intended Cloudflare account and the active `avnxmcp.org` zone has been identified. R2 returned Cloudflare error `10042` because R2 has not been enabled for the account. Therefore neither bucket, the custom domain, nor R2 API credentials have been created yet. Publication must remain fail-closed until the owner enables R2 in the Cloudflare dashboard and the verification checklist below passes.
+Wrangler is authenticated to the intended Cloudflare account and the active `avnxmcp.org` zone has been identified. R2 returned Cloudflare error `10042` because R2 has not been enabled for the account. Therefore neither bucket, the custom domain, nor R2 API credentials have been created yet. Publication must remain fail-closed for the `r2` host until the owner enables R2 in the Cloudflare dashboard and the verification checklist below passes.
+
+Publication is not blocked on R2 for the interim: `sb-models publish --host github-release` (`docs/publishing-interface-v1.md`) uploads to a GitHub Release, re-verifies every object by re-download, and signs and attaches the catalog exactly as this document's upload order and verification rules describe, just with GitHub Releases standing in for the two R2 buckets below. Moving to `--host r2` once this checklist passes does not change the catalog schema, the receipt shape, or the consumer contract.
 
 Useful official references:
 

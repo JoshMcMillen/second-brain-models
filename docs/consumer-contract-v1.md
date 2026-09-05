@@ -93,9 +93,15 @@ The exact JSON Schema will be versioned in `schemas/catalog-v1.schema.json`. The
   "expires_at": "2026-09-08T18:00:00Z",
   "key_id": "sha256:<64-lowercase-hex-public-key-fingerprint>",
   "promotion_policy": "promotion-v1",
+  "distribution": {
+    "host": "github-release",
+    "release": "catalog-stable-v14"
+  },
   "entries": []
 }
 ```
+
+`distribution` is an additive v1 field set by `sb-models publish` (`docs/publishing-interface-v1.md`). Its absence, under the schema_version 1 compatibility rule below, means the catalog was built but not yet published, or was published by tooling that predates this field; the client MUST NOT reject an otherwise-valid catalog for lacking it.
 
 Each installable entry binds repository metadata and evaluation results to exact, schema-validated model and runtime snapshots. The complete nested shapes are defined by `manifest-v1.schema.json` and `runtime-v1.schema.json`:
 
@@ -139,11 +145,22 @@ Each installable entry binds repository metadata and evaluation results to exact
       }
     ]
   },
+  "assets": {
+    "artifact_url": "https://github.com/<owner>/<repo>/releases/download/catalog-stable-v14/models-sha256-<model-artifact-digest>-model.gguf",
+    "license_url": "https://github.com/<owner>/<repo>/releases/download/catalog-stable-v14/licenses-<model-license-digest>-LICENSE",
+    "runtime_license_url": "https://github.com/<owner>/<repo>/releases/download/catalog-stable-v14/licenses-<runtime-license-digest>-LICENSE",
+    "result_url": "https://github.com/<owner>/<repo>/releases/download/catalog-stable-v14/results-<model-artifact-digest>-result.json",
+    "runtime_package_urls": {
+      "windows-x86_64": "https://github.com/<owner>/<repo>/releases/download/catalog-stable-v14/runtimes-sha256-<runtime-package-digest>-<platform-package>"
+    }
+  },
   "revocation": null
 }
 ```
 
 The abbreviated nested objects above illustrate the immutable download fields; actual catalog entries MUST contain every field required by their schemas. Each model and runtime license is committed adjacent to its manifest, then bound to one public `licenses/<sha256>/LICENSE` object by repository path, SHA-256, and byte size. External quality scores are exact decimal strings, not floating-point JSON values. Hardware fields are publisher claims, not measurements by this project. The UI MUST label them accordingly.
+
+`assets` is an additive v1 field, also set by `sb-models publish`, carrying the exact download URL this project already verified for every object this entry references on the catalog's current `distribution.host`. When present, the client SHOULD use these URLs directly rather than deriving a download location from a separately configured base host: they are correct regardless of whether the current host is the interim `github-release` or the eventual production `r2`, and the flattened GitHub Releases filenames (`<flattened-repository-path>`, `/` replaced with `-`) are otherwise not guessable from the manifest alone. Its absence means the same compatibility fallback as `distribution`. Every URL, `assets` or otherwise, still MUST be validated against the [artifact download and verification](#artifact-download-and-verification) rules below -- an `assets` URL is a location, never a substitute for verifying SHA-256 and size against the signed manifest.
 
 The evaluation result records resource-tier-calibrated `eligible_task_contracts`, and the approved manifest may list only a human-reviewed subset. The resource tier is derived from the exact artifact byte size; it is metadata, not a hardware guarantee. These fields communicate tested suitability and may inform defaults. Suggested and approved task labels MUST NOT override the user's model selection or grant tool, write, communication, scheduling, or other host authority.
 
@@ -179,6 +196,8 @@ The client MUST:
 - Verify and retain the exact model and runtime license bytes before installation; never substitute license text fetched outside the signed catalog.
 - Leave the currently active model unchanged after a failed or canceled installation.
 
+While the current `distribution.host` is the interim `github-release` (see [Catalog envelope](#catalog-envelope)), a download URL is a `github.com/<owner>/<repo>/releases/download/<release>/<flattened-name>` URL rather than a `models.avnxmcp.org` path, and GitHub's own CDN redirect for a release asset is part of that configured origin for this mode; the content-addressed digest agreement above is enforced by verifying the downloaded bytes' SHA-256 against the manifest digest, since the flattened GitHub Releases filename does not itself carry the `/sha256/<digest>/` path segment. This changes only which origin is configured and how the digest agreement is checked, never the requirement that every downloaded byte is verified against the exact signed manifest value before installation.
+
 R2 ETags are not a substitute for the signed SHA-256 value, especially for multipart uploads.
 
 ## Compatibility
@@ -186,6 +205,28 @@ R2 ETags are not a substitute for the signed SHA-256 value, especially for multi
 V1 consumers MUST reject unknown major `schema_version` values. Additive fields within schema version 1 may be ignored unless marked required by the published JSON Schema. Removing a field or changing its meaning requires a new major contract version.
 
 Catalog versions are monotonically increasing integers within each channel. A beta catalog and stable catalog maintain independent version counters.
+
+## Contract fixtures for Second Brain's own tests
+
+Every catalog release -- `beta`, `stable`, or `revoked`, including an empty one with zero installable entries -- always also attaches this project's versioned JSON Schemas (`schemas/*.json`) and its signing fixtures (`fixtures/signing/`): a valid fixture public key, a valid fixture catalog, its valid detached signature, and at least two invalid fixtures (a bad signature and tampered catalog bytes) a consumer's own tests can assert fail verification. This lets Second Brain's test suite exercise this project's exact schemas and its exact canonicalize/sign/verify behavior -- including the negative cases -- against real committed bytes, without vendoring copies that can drift.
+
+The URL for any of these files follows the same deterministic formula `sb-models publish` uses for every other object (`docs/publishing-interface-v1.md`), and is stable enough for a test suite to construct without an API call:
+
+```text
+https://github.com/<owner>/<repo>/releases/download/<release>/<flattened-path>
+```
+
+- `<release>` is `catalog-<channel>-v<catalog_version>`, using the exact `channel` and `catalog_version` of a catalog the client has already fetched and signature-verified (never a value the client invents).
+- `<flattened-path>` is the file's path relative to the repository root with every `/` replaced by `-` (GitHub Releases assets share one flat namespace and forbid path separators in a filename).
+
+For example, once `catalog-beta-v1` is published, `schemas/catalog-v1.schema.json` and `fixtures/signing/catalog-v1.bad-signature.json.sig` are, respectively:
+
+```text
+https://github.com/JoshMcMillen/second-brain-models/releases/download/catalog-beta-v1/schemas-catalog-v1.schema.json
+https://github.com/JoshMcMillen/second-brain-models/releases/download/catalog-beta-v1/fixtures-signing-catalog-v1.bad-signature.json.sig
+```
+
+These fixture files are not schema-validated catalog entries and carry no signature of their own beyond the ordinary GitHub Release; a test fetching them still MUST verify any digest it independently cares about rather than trusting transport alone.
 
 ## Privacy
 

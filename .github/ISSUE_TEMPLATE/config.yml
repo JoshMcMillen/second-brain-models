@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability, leaked credential, or signing-key concern
+    url: https://github.com/JoshMcMillen/second-brain-models/security/advisories/new
+    about: Do not open a public issue for this. Use GitHub's private vulnerability reporting, per SECURITY.md.
+  - name: Second Brain application questions
+    # Placeholder: point this at the actual Second Brain application repository's
+    # discussions or issues once the owner confirms its exact name/URL, the same
+    # way CODEOWNERS flags its own placeholder GitHub handle.
+    url: https://github.com/JoshMcMillen/second-brain/discussions
+    about: This repository is only the model trust/distribution project. For anything about the Second Brain app itself (installing, running, or using local models), ask there instead.

@@ -2,12 +2,13 @@ from __future__ import annotations
 
 from pathlib import Path
 import hashlib
+import json
 import shutil
 import zipfile
 
 import pytest
 
-from second_brain_models.jsonio import write_canonical
+from second_brain_models.jsonio import load_json, write_canonical
 
 
 SOURCE_ROOT = Path(__file__).resolve().parents[1]
@@ -17,6 +18,7 @@ SOURCE_ROOT = Path(__file__).resolve().parents[1]
 def policy_repo(tmp_path: Path) -> Path:
     for name in ("policy", "schemas", "evals"):
         shutil.copytree(SOURCE_ROOT / name, tmp_path / name)
+    shutil.copytree(SOURCE_ROOT / "fixtures" / "signing", tmp_path / "fixtures" / "signing")
     return tmp_path
 
 
@@ -116,3 +118,105 @@ def build_candidate(root: Path, staging: Path) -> tuple[Path, Path, Path]:
     manifest_path = model_dir / "manifest.json"
     write_canonical(manifest_path, manifest)
     return manifest_path, model_path, runtime_path
+
+
+def _golden_output(case: dict) -> dict:
+    """Build one deterministically-passing prediction for a quality-v1 case.
+
+    Generic over every case shape in the suite: every ``field_equals``/
+    ``array_equals`` check pins an exact value, and any remaining
+    ``field_type``-only field gets a type-correct placeholder.
+    """
+    exact = next(check["value"] for check in case["expected_checks"] if check["op"] == "json_exact_keys")
+    output = {key: None for key in exact}
+    for check in case["expected_checks"]:
+        if check["op"] in {"field_equals", "array_equals"}:
+            output[check["path"].lstrip("/")] = check["value"]
+        elif check["op"] == "field_type":
+            key = check["path"].lstrip("/")
+            if output[key] is None:
+                output[key] = {"number": 0.5, "string": "fixture"}[check["value"]]
+    return output
+
+
+def build_installable_candidate(root: Path, staging: Path) -> tuple[Path, Path, Path, Path]:
+    """Build one fully genuine, installable "beta"-channel candidate.
+
+    Reuses ``build_candidate()`` for the model/runtime/license shape, then
+    does everything a real reviewer would do to make it installable on the
+    ``beta`` channel: marks the runtime family's human review "approved" and
+    records a matching entry in ``policy/runtime-allowlist.yaml``'s
+    ``approved_runtime_manifests`` (mirroring the separate, owner-gated
+    runtime approval beta/stable promotion requires), then promotes the
+    manifest itself to ``beta``/``approved``. Runs the real quality-v1 suite
+    through ``evaluate_predictions()`` with golden outputs to produce a
+    genuine passing result, so ``build_catalog(channel="beta")`` picks it up.
+
+    Returns (manifest_path, model_path, runtime_path, result_path).
+    """
+    import yaml
+
+    from second_brain_models.evaluation import evaluate_predictions, load_suite
+    from second_brain_models.policy import load_policy_bundle
+
+    manifest_path, model_path, runtime_path = build_candidate(root, staging)
+
+    runtime = load_json(runtime_path)
+    runtime["human_review"] = {
+        "required": True, "status": "approved",
+        "review_reference": "fixture-runtime-review-1",
+    }
+    write_canonical(runtime_path, runtime)
+    runtime_digest = sha(runtime_path.read_bytes())
+
+    allowlist_path = root / "policy" / "runtime-allowlist.yaml"
+    allowlist = yaml.safe_load(allowlist_path.read_text(encoding="utf-8"))
+    allowlist["approved_runtime_manifests"] = [{
+        "manifest_path": runtime_path.relative_to(root).as_posix(),
+        "manifest_sha256": runtime_digest,
+        "runtime_id": runtime["runtime_id"],
+        "version": runtime["version"],
+        "revision": runtime["upstream"]["revision"],
+        "decision": "approved",
+    }]
+    allowlist_path.write_text(yaml.safe_dump(allowlist, sort_keys=False), encoding="utf-8")
+
+    manifest = load_json(manifest_path)
+    manifest["runtime"]["manifest_sha256"] = runtime_digest
+    manifest["promotion"] = {
+        "policy_id": "promotion-v1", "channel": "beta", "status": "approved",
+        "human_review_required": True,
+        "approved_task_contracts": ["intent_routing-v1", "grounded_summary-v1"],
+        "review_reference": "fixture-beta-review-1",
+    }
+    write_canonical(manifest_path, manifest)
+
+    promotion = load_policy_bundle(root)["promotion"]
+    suite = load_suite(root / "evals" / "quality-v1.jsonl", promotion)
+    predictions_path = staging / "predictions.jsonl"
+    with predictions_path.open("w", encoding="utf-8", newline="\n") as handle:
+        for case in suite:
+            output_text = json.dumps(_golden_output(case), separators=(",", ":"))
+            handle.write(json.dumps({"case_id": case["case_id"], "output_text": output_text}, separators=(",", ":")) + "\n")
+
+    package = runtime["packages"][0]
+    artifact_digest = manifest["artifact"]["sha256"]
+    result_path = root / "results" / artifact_digest / "result.json"
+    evaluate_predictions(
+        repo_root=root, manifest_path=manifest_path, predictions_path=predictions_path,
+        output_path=result_path, runner_id="fixture-runner", runner_version="1.0.0",
+        runtime_version=runtime["version"], runtime_platform=package["platform"],
+        runtime_package_sha256=package["sha256"], isolation_id="fixture-evaluation-1",
+        isolation_evidence={
+            "network_mode": "none", "dns_resolution_available": False,
+            "outbound_connectivity_available": False, "default_route_present": False,
+            "loopback_runtime_reachable": True, "monitor_method": "strace-network-syscalls",
+            "monitor_started_before_runtime": True, "attempted_dns": 0, "attempted_tcp": 0,
+            "attempted_udp": 0, "network_attempts_observed": 0,
+            "monitor_evidence_sha256": "d" * 64, "verified_at": "2026-09-01T12:04:00Z",
+            "isolation_id": "fixture-evaluation-1",
+        },
+        runtime_started_at="2026-09-01T12:00:00Z", inference_started_at="2026-09-01T12:01:00Z",
+        inference_finished_at="2026-09-01T12:03:00Z", runtime_finished_at="2026-09-01T12:04:00Z",
+    )
+    return manifest_path, model_path, runtime_path, result_path

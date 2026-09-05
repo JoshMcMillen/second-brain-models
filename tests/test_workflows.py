@@ -45,8 +45,29 @@ def test_privileged_and_candidate_workflows_fail_safe() -> None:
     for name in ("publish.yml", "revoke.yml"):
         text = (WORKFLOW_ROOT / name).read_text(encoding="utf-8")
         assert "contents: read" in text
-        assert "FAIL CLOSED:" in text
         assert "git push" not in text
+
+    # revoke.yml has no upload/verify path of its own yet (docs/publishing-interface-v1.md)
+    # and must still fail closed after signing a revocation and rebuilding the catalog.
+    revoke = (WORKFLOW_ROOT / "revoke.yml").read_text(encoding="utf-8")
+    assert "FAIL CLOSED:" in revoke
+
+    # publish.yml now implements the real interim publish path instead of failing
+    # closed after signing (docs/publishing-interface-v1.md).
+    publish = (WORKFLOW_ROOT / "publish.yml").read_text(encoding="utf-8")
+    publish_document = yaml.safe_load(publish)
+    assert "FAIL CLOSED:" not in publish
+    assert publish_document["permissions"] == {"contents": "read"}
+    assert publish_document["jobs"]["publish"]["permissions"] == {"contents": "write"}
+    publish_triggers = publish_document.get("on", publish_document.get(True))
+    assert publish_triggers["workflow_dispatch"]["inputs"]["channel"]["options"] == [
+        "beta", "stable",
+    ]
+    assert "sb-models publish" in publish
+    assert "--host github-release" in publish
+    assert "--staging-root" in publish
+    assert "GH_TOKEN: ${{ github.token }}" in publish
+    assert "test -s keys/public/catalog-release-v1.pem" in publish
 
     evaluation = (WORKFLOW_ROOT / "evaluate.yml").read_text(encoding="utf-8")
     evaluation_document = yaml.safe_load(evaluation)

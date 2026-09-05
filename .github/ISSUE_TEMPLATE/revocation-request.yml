@@ -1,0 +1,71 @@
+name: Revocation request
+description: Ask the owner to revoke a published artifact or release. This does not revoke anything by itself.
+title: "[revocation] "
+labels: ["revocation-request"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Revocation is an owner-gated, signed action (`revoke.yml`, protected
+        `model-publish` environment) described in `docs/promotion-policy.md`.
+        Filing this issue only starts that review; it does not remove
+        anything from a catalog by itself. If risk is severe and ongoing,
+        say so under urgency and consider also using `SECURITY.md`'s private
+        reporting path instead of a public issue.
+  - type: input
+    id: model_or_release_id
+    attributes:
+      label: Model ID, release, or exact artifact SHA-256
+      description: Whatever exactly identifies the affected manifest or catalog entry.
+      placeholder: "qwen3-4b-q4_k_m, release bc640142c66e1fdd12af0bd68f40445458f3869b, or its artifact sha256"
+    validations:
+      required: true
+  - type: dropdown
+    id: channel
+    attributes:
+      label: Channel(s) affected
+      multiple: true
+      options:
+        - test
+        - beta
+        - stable
+        - "not yet published (candidate only)"
+    validations:
+      required: true
+  - type: dropdown
+    id: reason
+    attributes:
+      label: Reason code
+      description: Matches promotion-v1's revocation reasons (policy/promotion-v1.yaml).
+      options:
+        - artifact_hash_mismatch
+        - upstream_provenance_failure
+        - license_withdrawn_or_incompatible
+        - runtime_security_issue
+        - evaluation_regression
+        - hidden_network_or_cloud_behavior
+        - other (explain below)
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence
+      description: What you observed, how to reproduce it, links to advisories or upstream changes, logs, or anything else that lets a reviewer confirm this independently.
+    validations:
+      required: true
+  - type: dropdown
+    id: urgency
+    attributes:
+      label: Urgency
+      options:
+        - "Routine -- no active exploitation or ongoing harm known"
+        - "Elevated -- credible risk to users who already installed this"
+        - "Severe -- active exploitation, supply-chain compromise, or similar; consider SECURITY.md instead"
+    validations:
+      required: true
+  - type: input
+    id: known_good_replacement
+    attributes:
+      label: Known-good replacement artifact SHA-256 (optional)
+      description: If a prior, unaffected digest should be offered as rollback.
