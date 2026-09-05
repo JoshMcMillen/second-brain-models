@@ -94,7 +94,8 @@ def build_catalog(
 
     entries: list[dict[str, Any]] = []
     # The dedicated "test" channel serves one small, permanently-fixed,
-    # non-model connectivity fixture (see fixtures/test-channel/canary/) so
+    # non-model connectivity fixture (see
+    # fixtures/test-channel/second-brain-install-canary/) so
     # Second Brain can exercise verify/download/install without a real
     # model. It lives outside models/ and outside the candidate->beta->
     # stable promotion ladder, but is otherwise validated identically.
