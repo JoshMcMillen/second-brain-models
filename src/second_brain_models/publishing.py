@@ -134,18 +134,30 @@ def contract_fixture_assets(repo_root: Path | str) -> tuple[ReleaseAsset, ...]:
     versioned JSON Schemas plus fixtures/signing (a valid fixture key,
     catalog, and signature, and at least two invalid fixtures a consumer's
     tests can assert fail verification). Every catalog release carries them,
-    even the empty catalog published before any model is approved.
+    even the empty catalog published before any model is approved -- so a
+    missing or empty contract directory fails closed here, before
+    ``plan_release`` returns, rather than silently publishing a release that
+    omits a required contract fixture out from under a consumer that assumes
+    it is always present.
     """
     root = Path(repo_root).resolve()
     assets: list[ReleaseAsset] = []
     for directory in _CONTRACT_FIXTURE_DIRECTORIES:
         source_dir = root / directory
         if not source_dir.is_dir():
-            continue
-        for path in sorted(source_dir.iterdir()):
-            if path.is_file():
-                relative = path.relative_to(root).as_posix()
-                assets.append(_asset(base=root, source_relative=relative))
+            raise ModelCatalogError(
+                f"required contract fixture directory is missing: {directory!r} "
+                f"(looked under {root}); every catalog release must attach "
+                "schemas and fixtures/signing (docs/consumer-contract-v1.md)"
+            )
+        files = sorted(path for path in source_dir.iterdir() if path.is_file())
+        if not files:
+            raise ModelCatalogError(
+                f"required contract fixture directory is empty: {directory!r} (looked under {root})"
+            )
+        for path in files:
+            relative = path.relative_to(root).as_posix()
+            assets.append(_asset(base=root, source_relative=relative))
     return tuple(assets)
 
 

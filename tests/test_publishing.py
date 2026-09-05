@@ -3,6 +3,7 @@ from __future__ import annotations
 import copy
 import hashlib
 from pathlib import Path
+import shutil
 
 import pytest
 
@@ -290,6 +291,40 @@ def test_receipt_workflow_run_is_null_outside_of_a_workflow(
     receipt, _ = _publish(policy_repo, tmp_path, keypair, channel="beta")
 
     assert receipt["workflow_run"] is None
+
+
+def test_contract_fixture_assets_fails_closed_when_schemas_directory_is_missing(
+    policy_repo: Path,
+) -> None:
+    shutil.rmtree(policy_repo / "schemas")
+
+    with pytest.raises(ModelCatalogError, match="required contract fixture directory is missing"):
+        contract_fixture_assets(policy_repo)
+
+
+def test_contract_fixture_assets_fails_closed_when_signing_fixtures_directory_is_empty(
+    policy_repo: Path,
+) -> None:
+    for path in (policy_repo / "fixtures" / "signing").iterdir():
+        path.unlink()
+
+    with pytest.raises(ModelCatalogError, match="required contract fixture directory is empty"):
+        contract_fixture_assets(policy_repo)
+
+
+def test_publish_never_uploads_a_single_byte_when_contract_fixtures_are_missing(
+    policy_repo: Path, tmp_path: Path, keypair,
+) -> None:
+    # A repo missing its contract-fixture surface must fail before any
+    # network call, not silently publish a release that omits it (this is
+    # what a consumer relying on docs/consumer-contract-v1.md would see).
+    shutil.rmtree(policy_repo / "fixtures" / "signing")
+    transport = FakeReleaseTransport()
+
+    with pytest.raises(ModelCatalogError, match="required contract fixture directory is missing"):
+        _publish(policy_repo, tmp_path, keypair, channel="beta", transport=transport)
+
+    assert transport.releases == {}
 
 
 def test_plan_release_rejects_two_paths_that_flatten_to_the_same_filename(
