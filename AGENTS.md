@@ -34,7 +34,9 @@ answers it.
   weight/package format is never committed. `.gitignore` and
   `second_brain_models.repository.check_repository()` both enforce this by
   scanning the whole tree for forbidden suffixes and binary magic bytes; a
-  committed model file fails CI outright.
+  committed model file fails CI outright. Even the tiny non-model canary
+  fixture (`fixtures/test-channel/`) reconstructs its bytes from source
+  (`second_brain_models/canary.py`) at run time rather than being committed.
 - **Not an inference service.** Nothing here starts, calls, or proxies a
   model. The one place a runtime actually executes a model is the isolated,
   offline `evaluate.yml` workflow, and even that never accepts a live

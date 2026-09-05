@@ -7,7 +7,7 @@ on:
         description: Catalog channel
         required: true
         type: choice
-        options: [beta, stable]
+        options: [test, beta, stable]
       catalog_version:
         description: New monotonic catalog version
         required: true
@@ -50,6 +50,9 @@ jobs:
       - name: Materialize staged objects this release will upload
         run: |
           mkdir -p staging catalog
+          if [ "$INPUT_CHANNEL" = "test" ]; then
+            sb-models build-canary --repo-root . --staging-root staging
+          fi
           # beta/stable staging (real model/runtime bytes from the private R2
           # candidate bucket) is not implemented yet; see docs/cloudflare-setup.md.
           # It is a no-op today because no manifest is currently approved for

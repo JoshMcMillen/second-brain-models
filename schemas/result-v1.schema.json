@@ -393,7 +393,7 @@
       "properties": {
         "manifest_path": {
           "type": "string",
-          "pattern": "^models/[a-z0-9][a-z0-9._-]*/manifest\\.json$"
+          "pattern": "^(?:models|fixtures/test-channel)/[a-z0-9][a-z0-9._-]*/manifest\\.json$"
         },
         "manifest_sha256": {
           "$ref": "#/$defs/sha256"

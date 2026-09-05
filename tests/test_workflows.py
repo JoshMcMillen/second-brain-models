@@ -61,13 +61,14 @@ def test_privileged_and_candidate_workflows_fail_safe() -> None:
     assert publish_document["jobs"]["publish"]["permissions"] == {"contents": "write"}
     publish_triggers = publish_document.get("on", publish_document.get(True))
     assert publish_triggers["workflow_dispatch"]["inputs"]["channel"]["options"] == [
-        "beta", "stable",
+        "test", "beta", "stable",
     ]
     assert "sb-models publish" in publish
     assert "--host github-release" in publish
     assert "--staging-root" in publish
     assert "GH_TOKEN: ${{ github.token }}" in publish
     assert "test -s keys/public/catalog-release-v1.pem" in publish
+    assert "sb-models build-canary" in publish
 
     evaluation = (WORKFLOW_ROOT / "evaluate.yml").read_text(encoding="utf-8")
     evaluation_document = yaml.safe_load(evaluation)

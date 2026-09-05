@@ -286,7 +286,7 @@
         },
         "repository_path": {
           "type": "string",
-          "pattern": "^models/[a-z0-9][a-z0-9._-]*/LICENSE$"
+          "pattern": "^(?:models|fixtures/test-channel)/[a-z0-9][a-z0-9._-]*/LICENSE$"
         },
         "path": {
           "type": "string",
@@ -571,7 +571,8 @@
           "enum": [
             "candidate",
             "beta",
-            "stable"
+            "stable",
+            "test"
           ]
         },
         "status": {
@@ -612,7 +613,8 @@
               "channel": {
                 "enum": [
                   "beta",
-                  "stable"
+                  "stable",
+                  "test"
                 ]
               },
               "status": {

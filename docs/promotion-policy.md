@@ -19,6 +19,16 @@ stable -> revoked
 
 Discovery, validation, and evaluation may be automated. Beta, stable, and revocation require the protected publishing environment and an owner decision.
 
+A separate, dedicated `test` catalog channel exists outside this ladder. It
+carries exactly one permanently-fixed, non-model connectivity fixture (see
+`fixtures/test-channel/second-brain-install-canary/`) so Second Brain can
+exercise signed-catalog verification and content-addressed install end to
+end without a real model. It is validated by the same candidate, license,
+and content-address checks as a real manifest, but does not require the
+runtime family itself to have completed the separate owner-gated runtime
+approval that `beta`/`stable` promotion requires, and it never grants any
+task capability.
+
 Merging one reviewed candidate manifest into protected `main` automatically starts its exact-artifact evaluation. A manual rerun of one canonical manifest path remains available through the reviewer-protected evaluation environment. After either trigger, every remaining download, static check, namespace-isolated runtime execution, synthetic inference, deterministic score, and evidence upload is automated in one job. The automatic environment accepts only protected-branch deployments. The job has read-only repository permission and no hardware matrix, R2 dependency, release credential, or promotion authority.
 
 ## Candidate requirements
