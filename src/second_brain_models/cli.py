@@ -351,6 +351,14 @@ def run(argv: list[str] | None = None) -> int:
         from .canary import build_canary_artifact_bytes
 
         manifest_path = args.repo_root / "fixtures" / "test-channel" / "second-brain-install-canary" / "manifest.json"
+        if not manifest_path.is_file():
+            raise ModelCatalogError(
+                f"the test-channel canary fixture manifest is missing: {manifest_path}; "
+                "sb-models build-canary requires "
+                "fixtures/test-channel/second-brain-install-canary/manifest.json, which this "
+                "contract-only change does not commit -- it is expected to appear in the "
+                "dedicated canary-fixture pull request that follows this one"
+            )
         manifest = load_json(manifest_path)
         raw = build_canary_artifact_bytes()
         digest = hashlib.sha256(raw).hexdigest()
