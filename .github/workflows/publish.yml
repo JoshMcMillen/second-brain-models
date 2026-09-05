@@ -51,11 +51,7 @@ jobs:
         run: |
           mkdir -p staging catalog
           if [ "$INPUT_CHANNEL" = "test" ]; then
-            if [ -d fixtures/test-channel/second-brain-install-canary ]; then
-              sb-models build-canary --repo-root . --staging-root staging
-            else
-              echo "::notice::fixtures/test-channel/second-brain-install-canary is not on this branch yet (the test channel's contract has landed but its canary fixture follows in a later pull request); skipping build-canary, so this run will publish an empty test catalog."
-            fi
+            sb-models build-canary --repo-root . --staging-root staging
           fi
           # beta/stable staging (real model/runtime bytes from the private R2
           # candidate bucket) is not implemented yet; see docs/cloudflare-setup.md.

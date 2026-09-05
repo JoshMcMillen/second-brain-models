@@ -100,7 +100,15 @@ def build_catalog(
     # model. It lives outside models/ and outside the candidate->beta->
     # stable promotion ladder, but is otherwise validated identically.
     manifest_root = root / ("fixtures/test-channel" if channel == "test" else "models")
-    for manifest_path in sorted(manifest_root.glob("*/manifest.json")) if manifest_root.is_dir() else []:
+    manifest_paths = sorted(manifest_root.glob("*/manifest.json")) if manifest_root.is_dir() else []
+    if channel == "test":
+        expected_path = manifest_root / "second-brain-install-canary" / "manifest.json"
+        if manifest_paths != [expected_path]:
+            raise PolicyError(
+                "test catalog requires exactly "
+                "fixtures/test-channel/second-brain-install-canary/manifest.json"
+            )
+    for manifest_path in manifest_paths:
         manifest = validate_file(manifest_path, "manifest", root)
         promotion = manifest["promotion"]
         artifact_digest = manifest["artifact"]["sha256"]
@@ -113,6 +121,8 @@ def build_catalog(
                 continue
             if not promotion.get("review_reference"):
                 raise PolicyError(f"published manifest lacks review_reference: {manifest_path}")
+            if channel == "test" and promotion["approved_task_contracts"]:
+                raise PolicyError(f"test manifest grants task contracts: {manifest_path}")
             if channel != "test" and not promotion["approved_task_contracts"]:
                 raise PolicyError(f"published manifest approves no task contracts: {manifest_path}")
         if channel == "stable" and (

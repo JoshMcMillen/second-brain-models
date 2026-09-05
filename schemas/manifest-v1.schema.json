@@ -632,6 +632,25 @@
               }
             }
           }
+        },
+        {
+          "if": {
+            "properties": {
+              "channel": {
+                "const": "test"
+              }
+            },
+            "required": [
+              "channel"
+            ]
+          },
+          "then": {
+            "properties": {
+              "approved_task_contracts": {
+                "maxItems": 0
+              }
+            }
+          }
         }
       ]
     }
