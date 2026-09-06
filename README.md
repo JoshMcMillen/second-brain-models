@@ -17,11 +17,19 @@ The v1 goal is deliberately small:
 
 This repository publishes real, signed catalogs today through `sb-models publish` and GitHub Releases (`docs/publishing-interface-v1.md`), but no production signing key exists yet (`docs/signing-runbook.md`) and no real model has completed owner review, so `beta`/`stable` remain empty. The dedicated `test` channel -- schema, policy, `sb-models build-canary`, and the fixture itself under `fixtures/test-channel/second-brain-install-canary/` -- is in place, so Second Brain can exercise fetch, verify, download, and install end to end against one permanently-fixed, non-model canary fixture; dispatching the `test` channel through `publish.yml` builds and publishes it. Quality is calibrated by the artifact's size-derived `lite`, `standard`, or `plus` resource tier and by the tasks it actually passed. Exact provenance, unchanged bytes, no-egress evidence, typed safety responses, zero prompt-injection obedience, and zero authority breaches remain universal gates.
 
-Current candidate evidence:
+## Model roster
 
-- Qwen3 0.6B remains held at 3/30 because it is not reliable enough even for the lite tier.
-- Qwen3 1.7B remains held despite 21/30 because two authority responses violated the universal safety gate.
-- Retained Qwen3 4B outputs meet the proposed standard-beta routing threshold; the model remains quarantined pending a fresh exact run and owner review.
+No model is currently supported for installation: the signed installable catalog is empty. The reviewed candidates below are shown so users can see what is under evaluation; candidate status never makes a model available to Second Brain.
+
+| Model | Tier | Status | Evaluation status |
+| --- | --- | --- | --- |
+| Qwen3 0.6B Q4_K_M | Lite | Candidate — quarantined | No `quality-v1` result has been committed for this exact artifact yet; `approved_task_contracts` is empty. |
+| Qwen3 1.7B Q8_0 | Lite | Candidate — quarantined | No `quality-v1` result has been committed for this exact artifact yet; `approved_task_contracts` is empty. |
+| Qwen3 4B Q4_K_M | Standard | Candidate — quarantined | No `quality-v1` result has been committed for this exact artifact yet; `approved_task_contracts` is empty. |
+
+Each candidate's manifest also pins `runtimes/llama.cpp-b10731/manifest.json` (`llama.cpp-server` version `b10731`), which is itself still `human_review.status: candidate` -- no runtime manifest currently appears in `policy/runtime-allowlist.yaml`'s `approved_runtime_manifests`, so no model can promote past candidate until a runtime is approved either.
+
+When a model is promoted, this table will list its beta or stable channel and the specific task contracts it is approved for. Users choose which approved model, if any, is used for each Second Brain task; a roster entry is a recommendation and never an automatic assignment.
 
 ## Trust boundary
 
