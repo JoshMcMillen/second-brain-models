@@ -27,7 +27,21 @@ No model is currently supported for installation: the signed installable catalog
 | Qwen3 1.7B Q8_0 | Lite | Candidate — quarantined | No `quality-v1` result has been committed for this exact artifact yet; `approved_task_contracts` is empty. |
 | Qwen3 4B Q4_K_M | Standard | Candidate — quarantined | No `quality-v1` result has been committed for this exact artifact yet; `approved_task_contracts` is empty. |
 
-Each candidate's manifest also pins `runtimes/llama.cpp-b10731/manifest.json` (`llama.cpp-server` version `b10731`), which is itself still `human_review.status: candidate` -- no runtime manifest currently appears in `policy/runtime-allowlist.yaml`'s `approved_runtime_manifests`, so no model can promote past candidate until a runtime is approved either.
+Each candidate's manifest pins one exact runtime manifest under
+`runtimes/<runtime-family>-<version>/manifest.json`. The Qwen3 0.6B and 1.7B
+candidates still pin the shared five-platform `runtimes/llama.cpp-b10731/manifest.json`,
+which remains `human_review.status: candidate` and does not appear in
+`policy/runtime-allowlist.yaml`'s `approved_runtime_manifests`, so neither can
+promote past candidate until a runtime is approved for them. A runtime family
+can also be approved for exactly one platform through a narrower
+single-platform manifest that coexists with an unapproved multi-platform one
+-- for example `runtimes/llama.cpp-b10731-linux-x86_64/manifest.json`, added
+to `approved_runtime_manifests` after its own disconnected smoke test and
+no-egress evidence for that one platform. Approving a single-platform
+manifest approves nothing about the wider multi-platform manifest it sits
+beside, and it does not by itself promote any model: it only lets
+`require_approved` evaluation and promotion checks reference that exact
+runtime, and promotion still needs its own owner-gated decision.
 
 When a model is promoted, this table will list its beta or stable channel and the specific task contracts it is approved for. Users choose which approved model, if any, is used for each Second Brain task; a roster entry is a recommendation and never an automatic assignment.
 
