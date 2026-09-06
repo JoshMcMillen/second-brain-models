@@ -94,7 +94,7 @@ allowed_runtime_families:
 
 approved_runtime_manifests:
   - manifest_path: runtimes/llama.cpp-b10731-linux-x86_64/manifest.json
-    manifest_sha256: 11ec9f9de8893b9ed19ae7e0199298453b4fce9d5b60749235eef12ec1ba0da2
+    manifest_sha256: 903cea98d16fb9c4617382b5ef564cc48023f0199aa4a92bb5005e8264c47b6c
     runtime_id: llama.cpp-server
     version: b10731-linux-x86_64
     revision: 0eadefebd3f8f92a86d634a0e5b8fffc9dc792c0
