@@ -25,7 +25,7 @@ No model is currently supported for installation: the signed installable catalog
 | --- | --- | --- | --- |
 | Qwen3 0.6B Q4_K_M | Lite | Candidate — quarantined | No `quality-v1` result has been committed for this exact artifact yet; `approved_task_contracts` is empty. |
 | Qwen3 1.7B Q8_0 | Lite | Candidate — quarantined | No `quality-v1` result has been committed for this exact artifact yet; `approved_task_contracts` is empty. |
-| Qwen3 4B Q4_K_M | Standard | Beta — approved | `quality-v1` result `qwen3-4b-q4_k_m.bc640142c66e1fdd12af0bd68f40445458f3869b.50eb6891944cf296` passed (21/30 cases, 29/30 typed outputs, 7/8 intent routing); `approved_task_contracts`: `intent_routing-v1`. Not yet published to the signed `beta` catalog. |
+| Qwen3 4B Q4_K_M | Standard | Beta — approved | `quality-v1` result at `results/7485fe6f11af29433bc51cab58009521f205840f5b4ae3a32fa7f92e8534fdf5/result.json` passed (21/30 cases, 29/30 typed outputs, 7/8 intent routing); `approved_task_contracts`: `intent_routing-v1`. Not yet published to the signed `beta` catalog. |
 
 Each candidate's manifest pins one exact runtime manifest under
 `runtimes/<runtime-family>-<version>/manifest.json`. The Qwen3 0.6B and 1.7B
