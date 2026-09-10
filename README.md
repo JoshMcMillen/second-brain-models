@@ -15,17 +15,17 @@ The v1 goal is deliberately small:
 7. Require an owner decision before publishing it as beta or stable.
 8. Distribute approved, content-addressed artifacts under a signed catalog, from an interim GitHub Releases host today and from Cloudflare R2 once it is enabled.
 
-This repository publishes real, signed catalogs today through `sb-models publish` and GitHub Releases (`docs/publishing-interface-v1.md`), but no production signing key exists yet (`docs/signing-runbook.md`) and no real model has completed owner review, so `beta`/`stable` remain empty. The dedicated `test` channel -- schema, policy, `sb-models build-canary`, and the fixture itself under `fixtures/test-channel/second-brain-install-canary/` -- is in place, so Second Brain can exercise fetch, verify, download, and install end to end against one permanently-fixed, non-model canary fixture; dispatching the `test` channel through `publish.yml` builds and publishes it. Quality is calibrated by the artifact's size-derived `lite`, `standard`, or `plus` resource tier and by the tasks it actually passed. Exact provenance, unchanged bytes, no-egress evidence, typed safety responses, zero prompt-injection obedience, and zero authority breaches remain universal gates.
+This repository publishes real, signed catalogs today through `sb-models publish` and GitHub Releases (`docs/publishing-interface-v1.md`), but no production signing key exists yet (`docs/signing-runbook.md`), so `beta`/`stable` remain empty even though Qwen3 4B Q4_K_M has completed owner review for `beta` (`intent_routing-v1`) and is not yet published. The dedicated `test` channel -- schema, policy, `sb-models build-canary`, and the fixture itself under `fixtures/test-channel/second-brain-install-canary/` -- is in place, so Second Brain can exercise fetch, verify, download, and install end to end against one permanently-fixed, non-model canary fixture; dispatching the `test` channel through `publish.yml` builds and publishes it. Quality is calibrated by the artifact's size-derived `lite`, `standard`, or `plus` resource tier and by the tasks it actually passed. Exact provenance, unchanged bytes, no-egress evidence, typed safety responses, zero prompt-injection obedience, and zero authority breaches remain universal gates.
 
 ## Model roster
 
-No model is currently supported for installation: the signed installable catalog is empty. The reviewed candidates below are shown so users can see what is under evaluation; candidate status never makes a model available to Second Brain.
+No model is currently supported for installation: the signed installable catalog is empty. The reviewed models below are shown so users can see what is under evaluation or has been approved for a channel; roster status alone never makes a model available to Second Brain until it is published in a signed catalog.
 
 | Model | Tier | Status | Evaluation status |
 | --- | --- | --- | --- |
 | Qwen3 0.6B Q4_K_M | Lite | Candidate — quarantined | No `quality-v1` result has been committed for this exact artifact yet; `approved_task_contracts` is empty. |
 | Qwen3 1.7B Q8_0 | Lite | Candidate — quarantined | No `quality-v1` result has been committed for this exact artifact yet; `approved_task_contracts` is empty. |
-| Qwen3 4B Q4_K_M | Standard | Candidate — quarantined | No `quality-v1` result has been committed for this exact artifact yet; `approved_task_contracts` is empty. |
+| Qwen3 4B Q4_K_M | Standard | Beta — approved | `quality-v1` result at `results/7485fe6f11af29433bc51cab58009521f205840f5b4ae3a32fa7f92e8534fdf5/result.json` passed (21/30 cases, 29/30 typed outputs, 7/8 intent routing); `approved_task_contracts`: `intent_routing-v1`. Not yet published to the signed `beta` catalog. |
 
 Each candidate's manifest pins one exact runtime manifest under
 `runtimes/<runtime-family>-<version>/manifest.json`. The Qwen3 0.6B and 1.7B
