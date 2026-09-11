@@ -1,0 +1,457 @@
+# macOS Apple Silicon disconnected smoke test for a CANDIDATE runtime manifest.
+#
+# Scope (slice A of docs/plans/macos-local-runtime.md in the second-brain
+# application repository): this workflow produces the disconnected
+# smoke-test and no-egress evidence needed to move
+# runtimes/llama.cpp-b10731-macos-arm64/manifest.json from
+# human_review.status "candidate" to "approved". It does NOT itself approve
+# anything: it never writes to policy/runtime-allowlist.yaml, never edits any
+# manifest, and never sets human_review.status. Folding the produced
+# no_egress_evidence entry into the manifest and flipping its status is a
+# separate, owner-gated pull request, exactly mirroring how
+# runtimes/llama.cpp-b10731-linux-x86_64/manifest.json was approved from
+# GitHub Actions run 33554351799's receipts in
+# https://github.com/JoshMcMillen/second-brain-models/pull/26.
+#
+# Why this is its own workflow instead of a job inside evaluate.yml: the
+# Linux no-egress evidence above was a byproduct of evaluate.yml's
+# evaluate-exact-candidate job, which is triggered by and scored against a
+# *model* manifest (sb-models evaluate / the quality-v1 fixture suite) and
+# hardcodes `runs-on: ubuntu-24.04` plus Linux-only isolation
+# (`sudo unshare --mount --net --pid --fork --mount-proc`) and monitoring
+# (`strace`, installed via apt-get). Neither the isolation mechanism nor the
+# monitor exists on macOS (`unshare` does not exist there; `dtruss`, the
+# nearest syscall-tracing analogue, is disabled for this purpose on hosted
+# runners by System Integrity Protection, which cannot be turned off in CI).
+# This workflow proves the RUNTIME PACKAGE alone is network-disconnected; it
+# does not evaluate any model's answer quality and does not touch
+# models/*/manifest.json. It only *reads* one existing candidate model
+# manifest to reuse its already-pinned, already-allowlisted artifact as
+# smoke-test fuel for one fixed loopback prompt -- the same reuse the design
+# note asked for ("read how the Linux job obtains a model for the smoke;
+# reuse it").
+#
+# Monitor mechanism: schemas/runtime-v1.schema.json's `monitor_method` enum
+# already includes "sandbox-network-log" for exactly this case; this
+# workflow is what makes that enum value real for the first time. It uses
+# Apple's Seatbelt sandbox (`sandbox-exec`) with a profile that allows
+# everything a normal process needs EXCEPT non-loopback networking, plus a
+# `log stream` unified-log capture (started before the runtime, per the
+# schema's `monitor_started_before_runtime` field) to retain evidence of any
+# denied network attempt. `dtruss` and `unshare` are never invoked anywhere
+# in this workflow -- see the "Record toolchain identity" step below, which
+# asserts neither is used, as the design note requested. This workflow does
+# NOT add a new `monitor_method` enum value; if a real dispatch run ever
+# shows `sandbox-exec` does not behave predictably on a hosted runner (the
+# thing this workflow's own negative-control step below checks first), the
+# correct response is to stop and escalate to the owner / a CODEOWNER
+# review per docs/promotion-policy.md's "Policy changes" section -- not to
+# unilaterally widen the schema.
+#
+# What this workflow CAN prove: the exact pinned macOS Apple Silicon
+# `llama-server` package, run under a network-denying sandbox on a
+# GitHub-hosted macOS runner, starts, answers one fixed loopback prompt over
+# the declared `openai-chat-completions-loopback` contract, and makes zero
+# observed non-loopback network attempts.
+#
+# What this workflow CANNOT prove: (1) Gatekeeper/quarantine behavior on a
+# real Mac -- this workflow downloads the archive itself via Python's
+# urllib, the same non-LaunchServices path the Second Brain app uses, so it
+# never exercises the quarantine xattr either way; that is a one-time,
+# owner-observed event on the actual production Mac (slice C), never a CI
+# result. (2) Metal-backed inference -- this smoke test intentionally runs
+# `llama-server` with `--n-gpu-layers 0` (CPU fallback) because proving
+# no-egress does not depend on the inference backend, and CPU mode is more
+# deterministic on a shared, virtualized CI runner. (3) Model answer
+# quality -- this is not a quality-v1 evaluation and grants no model any
+# task suitability. (4) That this exact mechanism will behave identically
+# on every future hosted-runner image; each dispatch is its own evidence
+# run, timestamped and hashed, not a standing guarantee.
+
+name: macOS Apple Silicon runtime smoke test (candidate evidence only)
+
+on:
+  workflow_dispatch:
+    inputs:
+      runtime_manifest_path:
+        description: Candidate macOS runtime manifest to smoke-test (never modified by this workflow)
+        required: true
+        default: runtimes/llama.cpp-b10731-macos-arm64/manifest.json
+        type: string
+      model_manifest_path:
+        description: Existing candidate model manifest whose already-pinned, already-allowlisted artifact supplies the one fixed loopback smoke prompt (read-only; never modified or promoted by this workflow)
+        required: true
+        default: models/qwen3-0.6b-q4_k_m/manifest.json
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  runtime-smoke-macos:
+    # macos-15 (bare, not "-large"/"-intel") is confirmed Apple Silicon
+    # (arm64) via https://github.com/actions/runner-images's own "Available
+    # Images" table as of 2026-09-10, and is not deprecated (unlike bare
+    # macos-14). "macos-latest" is deliberately NOT used here: it currently
+    # resolves to macos-26 Arm64, but -latest is documented to move to
+    # whatever image is newest GA, which is exactly the ambiguity the design
+    # note asked to avoid for a runtime-identity-sensitive job.
+    runs-on: macos-15
+    timeout-minutes: 30
+    env:
+      RUNTIME_MANIFEST_PATH: ${{ inputs.runtime_manifest_path }}
+      MODEL_MANIFEST_PATH: ${{ inputs.model_manifest_path }}
+      SMOKE_PORT: "8734"
+      SMOKE_PROMPT: "Reply with the single word OK."
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: Install pinned repository tooling
+        run: python -m pip install .
+
+      - name: Record toolchain identity (dtruss/unshare are never invoked by this workflow)
+        run: |
+          set -euo pipefail
+          {
+            sw_vers
+            uname -a
+            echo "sandbox-exec: $(command -v sandbox-exec)"
+            echo "dtruss path (recorded, NOT used): $(command -v dtruss || echo not-present)"
+            echo "dtruss is not relied on by this workflow: SIP blocks it for this purpose on hosted runners and it has no role below."
+            echo "unshare path (recorded, NOT used): $(command -v unshare || echo not-present-on-macos)"
+            echo "unshare is not relied on by this workflow: it is a Linux-only tool with no macOS equivalent."
+            python3 --version
+          } | tee "$RUNNER_TEMP/toolchain.txt"
+
+      - name: Validate repository state and the candidate runtime manifest
+        run: |
+          set -euo pipefail
+          sb-models repo-check --repo-root "$GITHUB_WORKSPACE"
+          sb-models validate --kind runtime --document "$RUNTIME_MANIFEST_PATH"
+
+      - name: Download the exact pinned macOS package and the smoke-test model artifact
+        run: |
+          set -euo pipefail
+          python3 - <<'PYEOF'
+          import json
+          import os
+          from pathlib import Path
+
+          from second_brain_models.evaluation_stage import (
+              _MODEL_REDIRECT_HOSTS,
+              _RUNTIME_REDIRECT_HOSTS,
+              _download,
+              _model_source_url,
+          )
+
+          repo_root = Path(os.environ["GITHUB_WORKSPACE"])
+          runner_temp = Path(os.environ["RUNNER_TEMP"])
+
+          runtime_manifest = json.loads((repo_root / os.environ["RUNTIME_MANIFEST_PATH"]).read_text(encoding="utf-8"))
+          package = next(p for p in runtime_manifest["packages"] if p["platform"] == "macos-arm64")
+          runtime_target = runner_temp / "staging" / "runtime" / package["path"]
+          runtime_host = _download(
+              source_url=package["upstream_url"], target=runtime_target,
+              expected_sha256=package["sha256"], expected_size=package["size_bytes"],
+              allowed_hosts=_RUNTIME_REDIRECT_HOSTS,
+          )
+          print(f"runtime package verified sha256={package['sha256']} host={runtime_host} -> {runtime_target}")
+
+          model_manifest = json.loads((repo_root / os.environ["MODEL_MANIFEST_PATH"]).read_text(encoding="utf-8"))
+          model_url = _model_source_url(model_manifest, repo_root)
+          model_target = runner_temp / "staging" / "model" / "model.gguf"
+          model_host = _download(
+              source_url=model_url, target=model_target,
+              expected_sha256=model_manifest["artifact"]["sha256"], expected_size=model_manifest["artifact"]["size_bytes"],
+              allowed_hosts=_MODEL_REDIRECT_HOSTS,
+          )
+          print(f"model artifact verified sha256={model_manifest['artifact']['sha256']} host={model_host} -> {model_target}")
+
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as env_file:
+              env_file.write(f"RUNTIME_PACKAGE_SHA256={package['sha256']}\n")
+              env_file.write(f"MODEL_PATH={model_target}\n")
+          PYEOF
+
+      - name: Static archive check and guarded extraction (no execution yet)
+        run: |
+          set -euo pipefail
+          sb-models runtime-package-check \
+            --repo-root "$GITHUB_WORKSPACE" \
+            --runtime-manifest "$RUNTIME_MANIFEST_PATH" \
+            --package-root "$RUNNER_TEMP/staging/runtime" \
+            --platform macos-arm64 \
+            --report "$RUNNER_TEMP/runtime-package-check-pre.json"
+          sb-models runtime-extract \
+            --repo-root "$GITHUB_WORKSPACE" \
+            --runtime-manifest "$RUNTIME_MANIFEST_PATH" \
+            --package-root "$RUNNER_TEMP/staging/runtime" \
+            --platform macos-arm64 \
+            --destination "$RUNNER_TEMP/runtime" \
+            > "$RUNNER_TEMP/runtime-extract.json"
+          cat "$RUNNER_TEMP/runtime-extract.json"
+          runtime_executable=$(python3 -c "import json; print(json.load(open('$RUNNER_TEMP/runtime-extract.json'))['executable'])")
+          chmod +x "$runtime_executable"
+          test -x "$runtime_executable"
+          echo "RUNTIME_EXECUTABLE=$runtime_executable" >> "$GITHUB_ENV"
+
+      - name: Prepare the Seatbelt (sandbox-exec) network-deny profile
+        run: |
+          set -euo pipefail
+          # (allow default) then selectively deny non-loopback networking,
+          # re-allowing loopback: this profile restricts ONLY networking, as
+          # the design note asks ("denies network-outbound and
+          # network-bind except loopback"), not filesystem or process
+          # access -- keeping it close to a normal, unsandboxed process in
+          # every other respect is what makes its behavior predictable
+          # enough to trust on a hosted runner we cannot pre-inspect.
+          # (debug deny) makes denied operations visible in the unified log,
+          # which the log-monitor step below captures as evidence.
+          cat > "$RUNNER_TEMP/loopback-only.sb" <<PROFILE
+          (version 1)
+          (debug deny)
+          (allow default)
+          (deny network-outbound)
+          (deny network-bind)
+          (allow network-outbound (remote ip "localhost:*"))
+          (allow network-bind (local ip "localhost:*"))
+          PROFILE
+          cat "$RUNNER_TEMP/loopback-only.sb"
+
+      - name: Prove the sandbox profile actually denies non-loopback network (negative control)
+        run: |
+          set -euo pipefail
+          set +e
+          sandbox-exec -f "$RUNNER_TEMP/loopback-only.sb" \
+            curl -sS --max-time 3 --connect-timeout 3 https://1.1.1.1/ -o /dev/null
+          negative_rc=$?
+          set -e
+          if [ "$negative_rc" -eq 0 ]; then
+            echo "sandbox-exec did NOT deny a non-loopback outbound connection on this runner." >&2
+            echo "This runner cannot be trusted to produce sandbox-network-log evidence right now;" >&2
+            echo "stopping rather than emitting a fabricated pass. Do not add a new monitor_method" >&2
+            echo "value unilaterally -- escalate to the owner / a CODEOWNER review per" >&2
+            echo "docs/promotion-policy.md's 'Policy changes' section instead." >&2
+            exit 1
+          fi
+          echo "Negative control confirmed: sandbox-exec denied the non-loopback outbound attempt (curl exit $negative_rc)."
+
+      - name: Prove the sandbox profile still allows loopback network (positive control)
+        run: |
+          set -euo pipefail
+          sandbox-exec -f "$RUNNER_TEMP/loopback-only.sb" \
+            python3 -c "
+          import socket
+          server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+          server.bind(('127.0.0.1', 0))
+          server.listen(1)
+          port = server.getsockname()[1]
+          client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+          client.settimeout(3)
+          client.connect(('127.0.0.1', port))
+          client.close()
+          server.close()
+          print('loopback bind+connect succeeded under the sandbox profile on port', port)
+          "
+
+      - name: Start the sandbox violation log monitor (before the runtime starts)
+        run: |
+          set -euo pipefail
+          sudo log stream --style ndjson \
+            --predicate '(subsystem == "com.apple.sandbox") OR (sender == "Sandbox") OR (process == "sandboxd") OR (eventMessage CONTAINS "Sandbox:") OR (eventMessage CONTAINS "deny(")' \
+            > "$RUNNER_TEMP/sandbox-log.ndjson" 2> "$RUNNER_TEMP/sandbox-log.stderr" &
+          echo $! > "$RUNNER_TEMP/log-stream.pid"
+          # Give the log-streaming process time to attach before anything it
+          # needs to observe happens, matching monitor_started_before_runtime.
+          sleep 5
+
+      - name: Start llama-server under the sandbox profile (loopback only, CPU fallback)
+        run: |
+          set -euo pipefail
+          # --host/--port/--model/--n-gpu-layers/--ctx-size are llama.cpp
+          # llama-server's long-stable flag names; this exact invocation is
+          # the "spike" the design note asked for -- unverified by this
+          # author (no macOS runner was available while authoring this
+          # workflow) and confirmed only by the first real dispatch run.
+          nohup sandbox-exec -f "$RUNNER_TEMP/loopback-only.sb" \
+            "$RUNTIME_EXECUTABLE" \
+            --host 127.0.0.1 --port "$SMOKE_PORT" \
+            --model "$MODEL_PATH" \
+            --n-gpu-layers 0 --ctx-size 512 \
+            > "$RUNNER_TEMP/llama-server.log" 2>&1 &
+          echo $! > "$RUNNER_TEMP/llama-server.pid"
+
+      - name: Wait for the loopback server to become reachable
+        run: |
+          set -euo pipefail
+          reachable=0
+          for i in $(seq 1 60); do
+            if curl -sf "http://127.0.0.1:$SMOKE_PORT/health" > /dev/null 2>&1; then
+              echo "loopback runtime reachable after ${i}s"
+              reachable=1
+              break
+            fi
+            if ! kill -0 "$(cat "$RUNNER_TEMP/llama-server.pid")" 2>/dev/null; then
+              echo "llama-server exited before becoming reachable; see llama-server.log" >&2
+              cat "$RUNNER_TEMP/llama-server.log" >&2 || true
+              exit 1
+            fi
+            sleep 1
+          done
+          if [ "$reachable" -ne 1 ]; then
+            echo "llama-server never became reachable on loopback within the timeout" >&2
+            cat "$RUNNER_TEMP/llama-server.log" >&2 || true
+            exit 1
+          fi
+
+      - name: Send the one fixed loopback prompt
+        run: |
+          set -euo pipefail
+          curl -sf "http://127.0.0.1:$SMOKE_PORT/v1/chat/completions" \
+            -H "Content-Type: application/json" \
+            -d "{\"model\":\"macos-arm64-smoke\",\"messages\":[{\"role\":\"user\",\"content\":\"$SMOKE_PROMPT\"}],\"max_tokens\":8,\"temperature\":0}" \
+            -o "$RUNNER_TEMP/completion-response.json"
+          python3 -c "
+          import json
+          body = json.load(open('$RUNNER_TEMP/completion-response.json', encoding='utf-8'))
+          assert body.get('choices'), 'no choices in completion response'
+          print('completion response parsed:', body['choices'][0].get('message', {}).get('content', ''))
+          "
+
+      - name: Stop llama-server and the log monitor
+        if: always()
+        run: |
+          set +e
+          if [ -f "$RUNNER_TEMP/llama-server.pid" ]; then
+            kill -TERM "$(cat "$RUNNER_TEMP/llama-server.pid")" 2>/dev/null
+            sleep 2
+            kill -KILL "$(cat "$RUNNER_TEMP/llama-server.pid")" 2>/dev/null
+          fi
+          if [ -f "$RUNNER_TEMP/log-stream.pid" ]; then
+            sudo kill -TERM "$(cat "$RUNNER_TEMP/log-stream.pid")" 2>/dev/null
+            sleep 2
+            sudo kill -KILL "$(cat "$RUNNER_TEMP/log-stream.pid")" 2>/dev/null
+          fi
+          exit 0
+
+      - name: Revalidate the runtime package bytes are unchanged after the run
+        run: |
+          set -euo pipefail
+          sb-models runtime-package-check \
+            --repo-root "$GITHUB_WORKSPACE" \
+            --runtime-manifest "$RUNTIME_MANIFEST_PATH" \
+            --package-root "$RUNNER_TEMP/staging/runtime" \
+            --platform macos-arm64 \
+            --report "$RUNNER_TEMP/runtime-package-check-post.json"
+          cmp "$RUNNER_TEMP/runtime-package-check-pre.json" "$RUNNER_TEMP/runtime-package-check-post.json"
+
+      - name: Parse the sandbox log for network violations and assemble evidence
+        run: |
+          set -euo pipefail
+          python3 - <<'PYEOF'
+          import hashlib
+          import json
+          import os
+          import re
+          from datetime import datetime, timezone
+          from pathlib import Path
+
+          runner_temp = Path(os.environ["RUNNER_TEMP"])
+          log_path = runner_temp / "sandbox-log.ndjson"
+          raw = log_path.read_bytes()
+          text = raw.decode("utf-8", errors="replace")
+
+          # The profile only ever ALLOWS loopback networking (see the
+          # profile above); it never allows non-loopback network-outbound
+          # or network-bind. So under this profile, any logged
+          # "deny(...) network-outbound" or "deny(...) network-bind" event
+          # is, by construction, a genuine non-loopback attempt -- there is
+          # no legitimate loopback traffic that would ever be denied and
+          # therefore need to be filtered back out here.
+          violation_pattern = re.compile(r"deny\(\d+\)\s+(network-outbound|network-bind)\b")
+          violations = [line[:400] for line in text.splitlines() if violation_pattern.search(line)]
+
+          if violations:
+              print(f"observed {len(violations)} non-loopback network violation(s):")
+              for line in violations[:20]:
+                  print(" ", line)
+              raise SystemExit("runtime attempted network access or non-loopback binding")
+
+          if not raw:
+              raise SystemExit("sandbox log monitor produced no output at all; cannot prove it was attached")
+
+          digest = hashlib.sha256(raw).hexdigest()
+          runtime_manifest = json.loads(Path(os.environ["RUNTIME_MANIFEST_PATH"]).read_text(encoding="utf-8"))
+          package = next(p for p in runtime_manifest["packages"] if p["platform"] == "macos-arm64")
+          if package["sha256"] != os.environ["RUNTIME_PACKAGE_SHA256"]:
+              raise SystemExit("runtime package digest changed between download and evidence assembly")
+
+          evidence = {
+              "platform": "macos-arm64",
+              "package_sha256": package["sha256"],
+              "network_mode": "none",
+              "monitor_method": "sandbox-network-log",
+              "monitor_started_before_runtime": True,
+              "network_attempts_observed": 0,
+              "attempted_dns": 0,
+              "attempted_tcp": 0,
+              "attempted_udp": 0,
+              "monitor_evidence_sha256": digest,
+              "loopback_runtime_reachable": True,
+              "verified_at": datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+              "isolation_id": f"gha-macos-{os.environ['GITHUB_RUN_ID']}-{os.environ['GITHUB_RUN_ATTEMPT']}",
+          }
+          out = runner_temp / "no-egress-evidence.json"
+          out.write_text(json.dumps(evidence, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+          print(json.dumps(evidence, indent=2, sort_keys=True))
+          PYEOF
+
+      - name: Validate the produced evidence against runtime-v1 (manifest stays "candidate" here)
+        run: |
+          set -euo pipefail
+          python3 - <<'PYEOF'
+          import json
+          import os
+          from pathlib import Path
+
+          runner_temp = Path(os.environ["RUNNER_TEMP"])
+          manifest_path = Path(os.environ["RUNTIME_MANIFEST_PATH"])
+          manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+          evidence = json.loads((runner_temp / "no-egress-evidence.json").read_text(encoding="utf-8"))
+          # This merge is for schema validation ONLY: it writes a temp file
+          # under RUNNER_TEMP, never touches the checked-out manifest, and
+          # never changes human_review.status. Folding this evidence into
+          # the real manifest is a separate, owner-gated pull request.
+          manifest["no_egress_evidence"] = [evidence]
+          (runner_temp / "manifest-with-evidence.json").write_text(
+              json.dumps(manifest, ensure_ascii=False, sort_keys=True), encoding="utf-8",
+          )
+          PYEOF
+          sb-models validate --kind runtime --document "$RUNNER_TEMP/manifest-with-evidence.json"
+
+      - name: Retain evidence and receipts as a workflow artifact
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: runtime-smoke-macos-arm64-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/toolchain.txt
+            ${{ runner.temp }}/runtime-package-check-pre.json
+            ${{ runner.temp }}/runtime-package-check-post.json
+            ${{ runner.temp }}/runtime-extract.json
+            ${{ runner.temp }}/loopback-only.sb
+            ${{ runner.temp }}/sandbox-log.ndjson
+            ${{ runner.temp }}/sandbox-log.stderr
+            ${{ runner.temp }}/llama-server.log
+            ${{ runner.temp }}/completion-response.json
+            ${{ runner.temp }}/no-egress-evidence.json
+            ${{ runner.temp }}/manifest-with-evidence.json
+          if-no-files-found: warn
+          retention-days: 30

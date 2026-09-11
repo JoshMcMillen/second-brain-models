@@ -24,6 +24,7 @@ def test_expected_workflows_parse_and_pin_every_action() -> None:
         "evaluate.yml",
         "publish.yml",
         "revoke.yml",
+        "runtime-smoke-macos.yml",
     }
     for path in paths:
         document = yaml.safe_load(path.read_text(encoding="utf-8"))
