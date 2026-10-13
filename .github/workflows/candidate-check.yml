@@ -99,7 +99,7 @@ jobs:
           sb-models candidate-check --repo-root . --manifest "$INPUT_MANIFEST_PATH" --artifact-root "$RUNNER_TEMP/candidate" --report candidate-check.json
           sb-models runtime-package-check --repo-root . --runtime-manifest "$INPUT_RUNTIME_MANIFEST_PATH" --package-root "$RUNNER_TEMP/candidate" --platform "$INPUT_PLATFORM" --report runtime-package-check.json
       - name: Retain exact check receipt
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: checked-model-${{ github.run_id }}
           path: |
